@@ -1,0 +1,9 @@
+{
+  "extends": ["//"],
+   "daemon": true,
+   "tasks": {
+    "build": {
+      "outputs": ["dist/**"]
+    }
+  }
+}

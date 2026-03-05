@@ -15,11 +15,11 @@ datasource db {
 
 model User {
   id        String   @id @default(uuid())
-  username  String   @unique
+  email  String   @unique
   password  String   
   createdAt DateTime @default(now())
 
-
+  refreshTokens RefreshToken[]
   messages Message[]
   rooms    RoomMember[]
 }
@@ -55,4 +55,14 @@ model Message {
 
   user User @relation(fields: [userId], references: [id])
   room Room @relation(fields: [roomId], references: [id])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -22,27 +22,37 @@ model User {
   refreshTokens RefreshToken[]
   messages Message[]
   rooms    RoomMember[]
+  ownedRooms    Room[]      @relation("RoomCreator")
 }
 model Room {
   id        String   @id @default(uuid())
   name      String?
   createdAt DateTime @default(now())
 
+  createdBy String
+  creator   User @relation("RoomCreator", fields: [createdBy], references: [id])
+
+  memberCount Int @default(1)
   members  RoomMember[]
   messages Message[]
+  @@index([createdBy])
 }
+
 model RoomMember {
   id     String @id @default(uuid())
 
   userId String
   roomId String
-
+  role   RoomRole @default(MEMBER)
   user User @relation(fields: [userId], references: [id])
-  room Room @relation(fields: [roomId], references: [id])
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
 
   joinedAt DateTime @default(now())
 
   @@unique([userId, roomId])
+  @@index([userId])
+  @@index([roomId])
 }
 
 model Message {
@@ -55,14 +65,29 @@ model Message {
 
   user User @relation(fields: [userId], references: [id])
   room Room @relation(fields: [roomId], references: [id])
+
+  @@index([roomId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model RefreshToken {
   id        String   @id @default(uuid())
-  tokenHash String
+  tokenHash String   @unique
   userId    String
   createdAt DateTime @default(now())
   expiresAt DateTime
+  lastUsedAt DateTime?
+   
+  ipAddress  String?
+  userAgent  String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum RoomRole {
+  ADMIN
+  MEMBER
 }

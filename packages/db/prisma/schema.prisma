@@ -28,9 +28,11 @@ model Room {
   id        String   @id @default(uuid())
   name      String?
   createdAt DateTime @default(now())
+  
 
   createdBy String
   creator   User @relation("RoomCreator", fields: [createdBy], references: [id])
+  visibility RoomVisibility @default(PUBLIC)
 
   memberCount Int @default(1)
   members  RoomMember[]
@@ -90,4 +92,8 @@ model RefreshToken {
 enum RoomRole {
   ADMIN
   MEMBER
+}
+enum RoomVisibility {
+  PUBLIC
+  PRIVATE
 }

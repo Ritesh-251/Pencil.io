@@ -1,7 +1,6 @@
 {
   "extends": ["//"],
-   "daemon": true,
-   "tasks": {
+  "tasks": {
     "build": {
       "outputs": ["dist/**"]
     }

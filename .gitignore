@@ -26,6 +26,10 @@ coverage
 out/
 build
 dist
+*.tsbuildinfo
+prisma.config.js
+prisma.config.d.ts
+prisma.config.d.ts.map
 
 
 # Debug

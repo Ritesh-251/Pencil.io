@@ -1,13 +1,30 @@
-import { WebSocketServer } from "ws";
+import dotenv from "dotenv";
+dotenv.config();
 
-const wss = new WebSocketServer({ port: 8080 });
+import { prisma } from "@repo/db";
+import { startSocketServer } from "./socketServer";
+import { initRedis, pubsub } from "./infra/redis";
+import { roomManager } from "./manager/roomManager";
+async function bootstrap(){
+  
+  try {
+    await prisma.$connect();
+    console.log("Postgres connected");
 
-wss.on("connection", function connection(ws) {
-  ws.on("error", console.error);
+    await initRedis();
+    console.log("Redis connected");
 
-  ws.on("message", function message(data) {
-    console.log("received: %s", data);
-  });
+    pubsub.subscribe((event) => {
+      roomManager.broadCast(event.roomId, event.payload);
+    });
 
-  ws.send("something");
-});
+
+    await startSocketServer();
+    
+  } catch (err) {
+     console.error("Server failed to start:", err);
+    process.exit(1);
+  }
+}
+
+bootstrap();

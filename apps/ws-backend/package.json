@@ -16,13 +16,15 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@repo/auth": "workspace:*",
     "@repo/db": "workspace:*",
-    "@repo/redis":"workspace:*",
+    "@repo/redis": "workspace:*",
+    "@types/amqplib": "^0.10.8",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/ws": "^8.18.1",
+    "amqplib": "^0.10.9",
     "dotenv": "^17.3.1",
     "jsonwebtoken": "^9.0.3",
-    "ws": "^8.19.0",
-    "@repo/auth": "workspace:*"
+    "ws": "^8.19.0"
   }
 }

@@ -1,21 +1,21 @@
 import { AuthenticatedSocket } from "../types/socket";
 import { SocketEvent } from "../types/event";
 
-import { handleRoomJoin,handleRoomLeave } from "../handlers/room.handler";
+import { handleRoomJoin, handleRoomLeave } from "../handlers/room.handler";
 import { handleChatSend } from "../handlers/chat.handler";
 import { handleChatHistory } from "../handlers/chatHistory.handler";
-import { handleStopTyping,handleTyping } from "../handlers/typingHandler";
-export class EventRouter{
-    async route(socket:AuthenticatedSocket,event:SocketEvent){
-        if (!event.type) {
-         this.sendError(socket, "Missing event type");
+import { handleStopTyping, handleTyping } from "../handlers/typingHandler";
+export class EventRouter {
+  async route(socket: AuthenticatedSocket, event: SocketEvent) {
+    if (!event.type) {
+      this.sendError(socket, "Missing event type");
       return;
-        }
-    try{
-        switch(event.type){
+    }
+    try {
+      switch (event.type) {
         case "ping":
-        this.handlePing(socket);
-        break;
+          this.handlePing(socket);
+          break;
         case "room:join":
           await handleRoomJoin(socket, event.payload);
           break;
@@ -26,48 +26,41 @@ export class EventRouter{
           await handleChatSend(socket, event.payload);
           break;
         case "chat:history":
-  await handleChatHistory(socket, event.payload);
-  break;
+          await handleChatHistory(socket, event.payload);
+          break;
         case "chat:typing":
-  handleTyping(socket, event.payload);
-  break;
+          handleTyping(socket, event.payload);
+          break;
 
-case "chat:stop_typing":
-  handleStopTyping(socket, event.payload);
-  break;
-  case "canvas:draw":
-  return handleCanvasDraw(socket, event);
+        case "chat:stop_typing":
+          handleStopTyping(socket, event.payload);
+          break;
+        case "canvas:draw":
+          return handleCanvasDraw(socket, event);
 
-
-         default:
+        default:
           this.sendError(socket, `Unknown event: ${event.type}`);
-
-    }
-    }catch(error){
- console.error("Router error:", error);
+      }
+    } catch (error) {
+      console.error("Router error:", error);
 
       this.sendError(socket, "Internal server error");
     }
-
-       
-    
-    }
-private handlePing(socket: AuthenticatedSocket) {
+  }
+  private handlePing(socket: AuthenticatedSocket) {
     socket.send(
       JSON.stringify({
         type: "pong",
         payload: {},
-      })
+      }),
     );
   }
-private sendError(socket: AuthenticatedSocket, message: string) {
+  private sendError(socket: AuthenticatedSocket, message: string) {
     socket.send(
       JSON.stringify({
         type: "error",
         payload: { message },
-      })
+      }),
     );
   }
-
-
 }

@@ -2,19 +2,24 @@ import { prisma } from "@repo/db";
 import { ApiError } from "../utils/ApiError";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { Response } from "express";
-import { createRoomSchema,joinRoomSchema,leaveRoomSchema,deleteRoomSchema } from "@repo/validation";
+import {
+  createRoomSchema,
+  joinRoomSchema,
+  leaveRoomSchema,
+  deleteRoomSchema,
+} from "@repo/validation";
 
 export const createRoom = async function (req: AuthRequest, res: Response) {
   try {
     const parsed = createRoomSchema.safeParse(req.body);
     if (!parsed.success) {
-  return res.status(400).json({
-    message: parsed.error.issues[0]?.message ?? "Validation error"
-  })
-}
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message ?? "Validation error",
+      });
+    }
     const userId = req.userId;
     if (!userId) throw new ApiError(401, "Unauthorized");
-    const { name,visibility } = parsed.data;
+    const { name, visibility } = parsed.data;
     const room = await prisma.room.create({
       data: {
         name,
@@ -53,12 +58,12 @@ export const createRoom = async function (req: AuthRequest, res: Response) {
 
 export const joinRoom = async function (req: AuthRequest, res: Response) {
   try {
-    const parsed = joinRoomSchema.safeParse(req.params)
+    const parsed = joinRoomSchema.safeParse(req.params);
     if (!parsed.success) {
-  return res.status(400).json({
-    message: parsed.error.issues[0]?.message ?? "Validation error"
-  })
-}
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message ?? "Validation error",
+      });
+    }
 
     const userId = req.userId;
     if (!userId) throw new ApiError(401, "Unauthorized");
@@ -118,12 +123,12 @@ export const joinRoom = async function (req: AuthRequest, res: Response) {
 };
 export const leaveRoom = async function (req: AuthRequest, res: Response) {
   try {
-    const parsed = joinRoomSchema.safeParse(req.params)
+    const parsed = joinRoomSchema.safeParse(req.params);
     if (!parsed.success) {
-  return res.status(400).json({
-    message: parsed.error.issues[0]?.message ?? "Validation error"
-  })
-}
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message ?? "Validation error",
+      });
+    }
     const userId = req.userId;
     if (!userId) throw new ApiError(401, "Unauthorized");
     const roomId = parsed.data.roomId as string;
@@ -221,12 +226,12 @@ export const leaveRoom = async function (req: AuthRequest, res: Response) {
 };
 export const DeleteRoom = async function (req: AuthRequest, res: Response) {
   try {
-    const parsed = joinRoomSchema.safeParse(req.params)
+    const parsed = joinRoomSchema.safeParse(req.params);
     if (!parsed.success) {
-  return res.status(400).json({
-    message: parsed.error.issues[0]?.message ?? "Validation error"
-  })
-}
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message ?? "Validation error",
+      });
+    }
     const userId = req.userId;
     if (!userId) throw new ApiError(401, "Unauthorized");
     const roomId = parsed.data.roomId as string;

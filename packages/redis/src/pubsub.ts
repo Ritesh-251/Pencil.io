@@ -27,7 +27,6 @@ export class RedisPubSub {
     this.pub = new Redis(redisUrl);
     this.sub = new Redis(redisUrl);
 
- 
     this.pub.on("connect", () => {
       console.log("[RedisPubSub] Publisher connected");
     });
@@ -54,10 +53,7 @@ export class RedisPubSub {
     };
 
     try {
-      await this.pub.publish(
-        RedisPubSub.CHANNEL,
-        JSON.stringify(fullEvent)
-      );
+      await this.pub.publish(RedisPubSub.CHANNEL, JSON.stringify(fullEvent));
     } catch (err) {
       console.error("[RedisPubSub] publish failed", {
         error: err,
@@ -76,7 +72,6 @@ export class RedisPubSub {
 
       let parsed: WSRedisEvent;
 
-
       try {
         parsed = JSON.parse(message);
       } catch {
@@ -84,7 +79,6 @@ export class RedisPubSub {
         return;
       }
 
-      
       if (
         !parsed ||
         typeof parsed.type !== "string" ||

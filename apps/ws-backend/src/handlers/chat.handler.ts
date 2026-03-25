@@ -1,41 +1,44 @@
-import { prisma} from "@repo/db";
+import { prisma } from "@repo/db";
 import { AuthenticatedSocket } from "../types/socket";
 import { roomManager } from "../manager/roomManager";
 import { pubsub } from "../infra/redis";
 
 function sendError(socket: AuthenticatedSocket, message: string) {
-  socket.send(JSON.stringify({
-    type: "error",
-    payload: { message }
-  }));
+  socket.send(
+    JSON.stringify({
+      type: "error",
+      payload: { message },
+    }),
+  );
 }
 
+export const handleChatSend = async function (
+  socket: AuthenticatedSocket,
+  payload: any,
+) {
+  if (!payload || typeof payload !== "object") {
+    return sendError(socket, "Invalid payload");
+  }
+  const { roomId, content } = payload;
 
-export const handleChatSend = async function(socket:AuthenticatedSocket,payload:any) {
-    if (!payload || typeof payload !== "object") {
-  return sendError(socket, "Invalid payload");
-}
-const { roomId, content } = payload;
+  if (!roomId) {
+    return sendError(socket, "roomId is required");
+  }
 
- if (!roomId) {
-  return sendError(socket, "roomId is required");
-}
-
-if (!content || typeof content !== "string") {
-  return sendError(socket, "content is required");
-}
-if (content.length > 1000) {
-  return sendError(socket, "message too long");
-}
-try {
-
+  if (!content || typeof content !== "string") {
+    return sendError(socket, "content is required");
+  }
+  if (content.length > 1000) {
+    return sendError(socket, "message too long");
+  }
+  try {
     const membership = await prisma.roomMember.findUnique({
       where: {
         userId_roomId: {
           userId: socket.userId,
-          roomId
-        }
-      }
+          roomId,
+        },
+      },
     });
 
     if (!membership) {
@@ -46,18 +49,16 @@ try {
       data: {
         content,
         userId: socket.userId,
-        roomId
-      }
+        roomId,
+      },
     });
-     const eventPayload = {
+    const eventPayload = {
       type: "chat:new",
-      payload: message
+      payload: message,
     };
 
-   
-
     roomManager.broadCast(roomId, eventPayload);
-   
+
     try {
       await pubsub.publish({
         type: "chat:new",
@@ -67,12 +68,8 @@ try {
     } catch (err) {
       console.error("Redis publish failed:", err);
     }
-
-   
   } catch (err) {
     console.error("Chat send error:", err);
     sendError(socket, "Internal server error");
   }
 };
-    
-    

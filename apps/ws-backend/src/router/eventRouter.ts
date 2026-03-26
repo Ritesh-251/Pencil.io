@@ -4,7 +4,8 @@ import { SocketEvent } from "../types/event";
 import { handleRoomJoin, handleRoomLeave } from "../handlers/room.handler";
 import { handleChatSend } from "../handlers/chat.handler";
 import { handleChatHistory } from "../handlers/chatHistory.handler";
-import { handleStopTyping, handleTyping } from "../handlers/typingHandler";
+import { handleStopTyping, handleTyping } from "../handlers/typing.handler";
+import { handleCanvasDraw } from "../handlers/canvas.handler";
 export class EventRouter {
   async route(socket: AuthenticatedSocket, event: SocketEvent) {
     if (!event.type) {

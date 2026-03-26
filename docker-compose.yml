@@ -27,6 +27,7 @@ services:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+
   redis:
     image: redis:7
     container_name: pencil-redis
@@ -36,7 +37,21 @@ services:
     volumes:
       - redis_data:/data
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: pencil-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
 volumes:
   postgres_data:
   pgadmin_data:
   redis_data:
+  rabbitmq_data:

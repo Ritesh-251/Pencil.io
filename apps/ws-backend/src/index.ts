@@ -1,6 +1,9 @@
 import dotenv from "dotenv";
 dotenv.config();
-
+import { initRabbitMQ } from "./infra/rabbitmq"
+import { startChatConsumer } from "./consumers/chat.consumer"
+import { startBroadcastConsumer } from "./consumers/broadcast.consumer"
+import { startCanvasConsumer } from "./consumers/canvas.consumer"
 import { prisma } from "@repo/db";
 import { startSocketServer } from "./socketServer";
 import { initRedis, pubsub } from "./infra/redis";
@@ -12,6 +15,14 @@ async function bootstrap() {
 
     await initRedis();
     console.log("Redis connected");
+    await initRabbitMQ()   // ✅ NEW
+
+  // start consumers
+  await startChatConsumer()
+  await startBroadcastConsumer()
+  await startCanvasConsumer()
+
+  
 
     pubsub.subscribe((event) => {
       roomManager.broadCast(event.roomId, event.payload);

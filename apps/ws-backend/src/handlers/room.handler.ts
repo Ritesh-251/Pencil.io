@@ -28,7 +28,7 @@ export const handleRoomJoin = async function (
     const membership = await prisma.roomMember.findUnique({
       where: {
         userId_roomId: {
-          userId: socket.userId,
+          userId: socket.userId!,
           roomId,
         },
       },
@@ -84,7 +84,7 @@ export const handleRoomLeave = async (
       payload: { roomId },
     }),
   );
-  roomManager.broadcast(roomId, {
+  roomManager.broadCast(roomId, {
     type: "presence:update",
     payload: {
       userId: socket.userId,

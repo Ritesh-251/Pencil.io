@@ -26,7 +26,7 @@ export const handleChatHistory = async function (
     const membership = await prisma.roomMember.findUnique({
       where: {
         userId_roomId: {
-          userId: socket.userId,
+          userId: socket.userId!,
           roomId,
         },
       },

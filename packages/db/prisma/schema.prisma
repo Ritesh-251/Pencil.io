@@ -88,6 +88,18 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
 }
+model CanvasObject {
+  id        String   @id                // objectId (uuid)
+  roomId    String
+  userId    String
+  type      String                     // "stroke" | "rect" | "circle" | "text"
+  data      Json                       // flexible shape data
+  version   Int                        // for future conflict handling
+  createdAt DateTime
+  updatedAt DateTime
+
+  @@index([roomId, createdAt])
+}
 
 enum RoomRole {
   ADMIN

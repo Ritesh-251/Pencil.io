@@ -5,7 +5,7 @@ import { handleRoomJoin, handleRoomLeave } from "../handlers/room.handler";
 import { handleChatSend } from "../handlers/chat.handler";
 import { handleChatHistory } from "../handlers/chatHistory.handler";
 import { handleStopTyping, handleTyping } from "../handlers/typing.handler";
-import { handleCanvasDraw } from "../handlers/canvas.handler";
+import { handleCanvasObject } from "../handlers/canvas.handler";
 export class EventRouter {
   async route(socket: AuthenticatedSocket, event: SocketEvent) {
     if (!event.type) {
@@ -37,7 +37,7 @@ export class EventRouter {
           handleStopTyping(socket, event.payload);
           break;
         case "canvas:draw":
-          return handleCanvasDraw(socket, event);
+          return handleCanvasObject(socket, event);
 
         default:
           this.sendError(socket, `Unknown event: ${event.type}`);

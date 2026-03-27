@@ -100,7 +100,30 @@ model CanvasObject {
 
   @@index([roomId, createdAt])
 }
+model CanvasSnapshot {
+  id        String   @id @default(uuid())
+  roomId    String
+  data      Json           // full canvas state
+  version   Int            // last included version
+  createdAt DateTime
 
+  @@index([roomId, version])
+}
+model CanvasActionHistory {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  action    String
+  objectId  String
+
+  before    Json?   
+  after     Json?   
+
+  version   Int
+  createdAt DateTime
+
+  @@index([roomId, userId, version])
+}
 enum RoomRole {
   ADMIN
   MEMBER

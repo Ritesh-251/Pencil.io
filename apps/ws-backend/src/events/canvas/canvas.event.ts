@@ -1,30 +1,30 @@
 import crypto from "crypto"
-import { DrawStrokeEvent } from "./canvas.types"
+import { CanvasObjectEvent } from "./canvas.types"
 
-export function createDrawStrokeEvent({
+export function createCanvasObjectEvent({
   roomId,
   userId,
-  strokeId,
-  points,
-  color,
-  width,
+  objectId,
+  type,
+  data,
 }: {
   roomId: string
   userId: string
-  strokeId: string
-  points: { x: number; y: number }[]
-  color: string
-  width: number
-}): DrawStrokeEvent {
+  objectId: string
+  type: "CREATE_OBJECT" | "UPDATE_OBJECT" | "DELETE_OBJECT"
+  data: any
+}) {
   return {
-    eventId: crypto.randomUUID(),
-    type: "DRAW_STROKE",
+    id: crypto.randomUUID(),
+    type: "canvas.object",
     roomId,
     userId,
     timestamp: Date.now(),
-    strokeId,
-    points,
-    color,
-    width,
+    version: 1,
+    payload: {
+      objectId,
+      action: type,
+      data,
+    },
   }
 }

@@ -1,25 +1,20 @@
-export type CanvasEventType =
-  | "DRAW_STROKE"
+export type CanvasAction =
   | "CREATE_OBJECT"
   | "UPDATE_OBJECT"
   | "DELETE_OBJECT"
-  | "CLEAR_CANVAS"
+  | "UNDO"
+  | "REDO"
 
-export type BaseCanvasEvent = {
-  eventId: string
+export type CanvasObjectEvent = {
+  id: string                
+  type: "canvas.object"      
   roomId: string
   userId: string
-  type: CanvasEventType
   timestamp: number
+  version: number
+  payload: {
+    objectId: string
+    action: CanvasAction
+    data: any
+  }
 }
-
-export type DrawStrokeEvent = BaseCanvasEvent & {
-  type: "DRAW_STROKE"
-  strokeId: string
-  points: { x: number; y: number }[]
-  color: string
-  width: number
-}
-
-export type CanvasEvent = DrawStrokeEvent
-// future: | CreateObjectEvent | UpdateObjectEvent | ...

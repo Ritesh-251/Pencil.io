@@ -1,26 +1,41 @@
-import { DrawStrokeEvent } from "../events/canvas/canvas.types"
+import { CanvasAction } from "../events/canvas/canvas.types"
 
 export class CanvasService {
-  /**
-   * Validates a draw stroke event payload.
-   * Returns an error message string, or null if valid.
-   */
-  validateStroke(event: DrawStrokeEvent): string | null {
-    if (!event.strokeId || typeof event.strokeId !== "string") {
-      return "strokeId is required"
+  validateObject(action: CanvasAction, data: any): string | null {
+    if (!action) return "Action is required"
+
+    if (action === "CREATE_OBJECT") {
+      if (!data?.type) return "Object type is required"
     }
-    if (!Array.isArray(event.points) || event.points.length === 0) {
-      return "points are required"
+
+    if (data?.type === "stroke") {
+      if (!Array.isArray(data.points) || data.points.length === 0) {
+        return "points are required"
+      }
+
+      if (data.points.length > 50) {
+        return "too many points"
+      }
+
+      if (!data.color) return "color is required"
+
+      if (typeof data.width !== "number" || data.width <= 0) {
+        return "invalid width"
+      }
     }
-    if (event.points.length > 50) {
-      return "too many points in a single stroke"
+
+    if (data?.type === "rect") {
+      if (typeof data.width !== "number" || typeof data.height !== "number") {
+        return "invalid rectangle dimensions"
+      }
     }
-    if (!event.color || typeof event.color !== "string") {
-      return "color is required"
+
+    if (data?.type === "text") {
+      if (!data.text || typeof data.text !== "string") {
+        return "text is required"
+      }
     }
-    if (typeof event.width !== "number" || event.width <= 0) {
-      return "width must be a positive number"
-    }
+
     return null
   }
 }

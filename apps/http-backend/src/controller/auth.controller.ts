@@ -259,6 +259,10 @@ export const logout = async function (req: Request, res: Response) {
 export const logoutAll = async function (req: AuthRequest, res: Response) {
   try {
     const userId = req.userId;
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
     await prisma.refreshToken.deleteMany({
       where: { userId },
     });

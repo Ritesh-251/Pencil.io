@@ -17,9 +17,13 @@
   "description": "",
   "dependencies": {
     "@repo/auth": "workspace:*",
-    "@repo/validation":"workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/validation": "workspace:*",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1"
   }

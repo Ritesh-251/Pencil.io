@@ -6,6 +6,7 @@ import {
   leaveRoom,
   getRooms,
   DeleteRoom,
+  updateRoomName,
 } from "../controller/room.controller";
 
 const router: Router = Router();
@@ -16,7 +17,9 @@ router.post("/:roomId/join", authMiddleware, joinRoom);
 
 router.post("/:roomId/leave", authMiddleware, leaveRoom);
 
-router.delete("/rooms/:roomId", authMiddleware, DeleteRoom);
+router.patch("/:roomId", authMiddleware, updateRoomName);
+
+router.delete("/:roomId", authMiddleware, DeleteRoom);
 router.get("/", authMiddleware, getRooms);
 
 export default router;

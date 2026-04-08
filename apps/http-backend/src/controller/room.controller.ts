@@ -5,8 +5,7 @@ import { Response } from "express";
 import {
   createRoomSchema,
   joinRoomSchema,
-  leaveRoomSchema,
-  deleteRoomSchema,
+  updateRoomNameSchema,
 } from "@repo/validation";
 
 export const createRoom = async function (req: AuthRequest, res: Response) {
@@ -23,6 +22,7 @@ export const createRoom = async function (req: AuthRequest, res: Response) {
     const room = await prisma.room.create({
       data: {
         name,
+        visibility: visibility ?? "PUBLIC",
         createdBy: userId,
         memberCount: 1,
         members: {
@@ -169,7 +169,7 @@ export const leaveRoom = async function (req: AuthRequest, res: Response) {
         });
         return;
       }
-      if ((room.createdBy = userId)) {
+      if (room.createdBy === userId) {
         const existingAdmin = await tx.roomMember.findFirst({
           where: {
             roomId,
@@ -310,6 +310,61 @@ export const getRooms = async function (req: AuthRequest, res: Response) {
     return res.status(200).json({
       rooms: formatted,
     });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return res.status(error.statusCode).json({
+        message: error.message,
+      });
+    }
+
+    console.error(error);
+    return res.status(500).json({
+      message: "Internal server error",
+    });
+  }
+};
+
+export const updateRoomName = async function (req: AuthRequest, res: Response) {
+  try {
+    const userId = req.userId;
+    if (!userId) throw new ApiError(401, "Unauthorized");
+
+    const parsed = updateRoomNameSchema.safeParse({
+      roomId: req.params.roomId,
+      name: req.body?.name,
+    });
+
+    if (!parsed.success) {
+      return res.status(400).json({
+        message: parsed.error.issues[0]?.message ?? "Validation error",
+      });
+    }
+
+    const { roomId, name } = parsed.data;
+
+    const membership = await prisma.roomMember.findUnique({
+      where: {
+        userId_roomId: {
+          userId,
+          roomId,
+        },
+      },
+    });
+
+    if (!membership) {
+      throw new ApiError(403, "Not a member of this room");
+    }
+
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: { name },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    return res.status(200).json({ room });
   } catch (error) {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({

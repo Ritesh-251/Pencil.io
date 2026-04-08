@@ -9,14 +9,15 @@ import {
   generateAccessToken,
 } from "../controller/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
+import { authRateLimitMiddleware } from "../middleware/authRateLimit.middleware";
 
 const router: Router = Router();
 
-router.post("/signup", signup);
-router.post("/signin", signin);
-router.post("/refresh", generateAccessToken);
+router.post("/signup", authRateLimitMiddleware, signup);
+router.post("/signin", authRateLimitMiddleware, signin);
+router.post("/refresh", authRateLimitMiddleware, generateAccessToken);
 router.post("/logout", logout);
-router.post("logout-all", logoutAll);
+router.post("/logout-all", authMiddleware, logoutAll);
 router.get("/sessions", authMiddleware, sessions);
 router.delete("/sessions/:sessionId", authMiddleware, deleteSession);
 

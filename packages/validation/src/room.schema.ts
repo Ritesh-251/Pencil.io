@@ -16,3 +16,8 @@ export const leaveRoomSchema = z.object({
 export const deleteRoomSchema = z.object({
   roomId: z.uuid(),
 });
+
+export const updateRoomNameSchema = z.object({
+  roomId: z.uuid(),
+  name: z.string().trim().min(1).max(100),
+});

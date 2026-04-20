@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
@@ -13,30 +7,52 @@ datasource db {
   provider = "postgresql"
 }
 
+
 model User {
   id        String   @id @default(uuid())
-  email  String   @unique
-  password  String   
+  email     String   @unique
+  password  String
   createdAt DateTime @default(now())
 
   refreshTokens RefreshToken[]
-  messages Message[]
-  rooms    RoomMember[]
-  ownedRooms    Room[]      @relation("RoomCreator")
+  messages      Message[]
+  rooms         RoomMember[]
+  ownedRooms    Room[] @relation("RoomCreator")
 }
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  tokenHash   String   @unique
+  userId      String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  lastUsedAt  DateTime?
+
+  ipAddress   String?
+  userAgent   String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+
+
 model Room {
-  id        String   @id @default(uuid())
-  name      String?
-  createdAt DateTime @default(now())
-  
+  id          String   @id @default(uuid())
+  name        String?
+  createdAt   DateTime @default(now())
 
-  createdBy String
-  creator   User @relation("RoomCreator", fields: [createdBy], references: [id])
-  visibility RoomVisibility @default(PUBLIC)
+  createdBy   String
+  creator     User @relation("RoomCreator", fields: [createdBy], references: [id])
 
+  visibility  RoomVisibility @default(PUBLIC)
   memberCount Int @default(1)
+
   members  RoomMember[]
   messages Message[]
+
   @@index([createdBy])
 }
 
@@ -46,9 +62,9 @@ model RoomMember {
   userId String
   roomId String
   role   RoomRole @default(MEMBER)
+
   user User @relation(fields: [userId], references: [id])
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
-
 
   joinedAt DateTime @default(now())
 
@@ -56,6 +72,8 @@ model RoomMember {
   @@index([userId])
   @@index([roomId])
 }
+
+
 
 model Message {
   id        String   @id @default(uuid())
@@ -73,61 +91,107 @@ model Message {
   @@index([createdAt])
 }
 
-model RefreshToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique
-  userId    String
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-  lastUsedAt DateTime?
-   
-  ipAddress  String?
-  userAgent  String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@index([userId])
-  @@index([expiresAt])
-}
+
 model CanvasObject {
-  id        String   @id                // objectId (uuid)
+  id        String   @id
   roomId    String
   userId    String
-  type      String                     // "stroke" | "rect" | "circle" | "text"
-  data      Json                       // flexible shape data
-  version   Int                        // for future conflict handling
+  type      String
+  data      Json // keep (backward compatibility)
+  crdt      Json // NEW
+  time      BigInt?
+  actorId   String?
+  version   Int // lastAppliedVersion
   createdAt DateTime
   updatedAt DateTime
 
+  @@index([roomId, version])    
+  @@index([roomId, time, actorId])
   @@index([roomId, createdAt])
 }
+
 model CanvasSnapshot {
   id        String   @id @default(uuid())
   roomId    String
-  data      Json           // full canvas state
-  version   Int            // last included version
-  createdAt DateTime
-
-  @@index([roomId, version])
-}
-model CanvasActionHistory {
-  id        String   @id @default(uuid())
-  roomId    String
-  userId    String
-  action    String
-  objectId  String
-
-  before    Json?   
-  after     Json?   
-
+  type      SnapshotType
+  baseVersion Int?
+  data      Json
   version   Int
   createdAt DateTime
 
-  @@index([roomId, userId, version])
+  @@index([roomId, version])
+  @@index([roomId, type, version])
 }
+
+
+
+model CanvasActionHistory {
+  id        String   @id @default(uuid())
+
+  roomId    String
+  userId    String
+
+  actionType CanvasActionType
+  objectId   String
+
+  before     Json
+  after      Json
+
+  time       BigInt?
+  actorId    String?
+  version    Int
+
+  
+  isUndone          Boolean  @default(false)
+  isRedoInvalidated Boolean  @default(false)
+  undoneAtVersion   Int?
+  referenceActionId String?
+
+ 
+  eventId String @unique
+
+  createdAt DateTime @default(now())
+
+
+  @@index([roomId, version])
+  @@index([roomId, userId, version])
+  @@index([roomId, userId, isUndone])
+  @@index([roomId, userId, isUndone, isRedoInvalidated])
+  @@index([roomId, userId, undoneAtVersion])
+  @@index([objectId, version])
+  @@index([objectId, time, actorId])
+  @@index([roomId, time, actorId])
+  @@index([roomId, createdAt])
+}
+
+
+
+model ProcessedEvent {
+  eventId  String   @id
+  createdAt DateTime @default(now())
+}
+
+enum CanvasActionType {
+  CREATE
+  UPDATE
+  DELETE
+  UNDO
+  REDO
+}
+
+enum SnapshotType {
+  BASE
+  DELTA
+}
+
+
+
 enum RoomRole {
   ADMIN
   MEMBER
 }
+
 enum RoomVisibility {
   PUBLIC
   PRIVATE

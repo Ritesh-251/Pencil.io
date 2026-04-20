@@ -8,12 +8,14 @@ import {
   DeleteRoom,
   updateRoomName,
 } from "../controller/room.controller";
+import { issueRoomMediaToken } from "../controller/media.controller";
 
 const router: Router = Router();
 
 router.post("/", authMiddleware, createRoom);
 
 router.post("/:roomId/join", authMiddleware, joinRoom);
+router.post("/:roomId/media/token", authMiddleware, issueRoomMediaToken);
 
 router.post("/:roomId/leave", authMiddleware, leaveRoom);
 

@@ -69,42 +69,64 @@ export const joinRoom = async function (req: AuthRequest, res: Response) {
     if (!userId) throw new ApiError(401, "Unauthorized");
     const roomId = parsed.data.roomId as string;
     if (!roomId) throw new ApiError(400, "Room ID required");
-    const room = await prisma.room.findUnique({
-      where: {
-        id: roomId,
-      },
-    });
+    await prisma.$transaction(async (tx) => {
+      const room = await tx.room.findUnique({
+        where: {
+          id: roomId,
+        },
+        select: {
+          id: true,
+          visibility: true,
+        },
+      });
 
-    if (!room) {
-      throw new ApiError(404, "Room not found");
-    }
-    if (room.visibility === "PRIVATE") {
-      throw new ApiError(403, "Room is private");
-    }
-    const existingMember = await prisma.roomMember.findUnique({
-      where: {
-        userId_roomId: {
+      if (!room) {
+        throw new ApiError(404, "Room not found");
+      }
+
+      if (room.visibility === "PRIVATE") {
+        throw new ApiError(403, "Room is private");
+      }
+
+      const existingMember = await tx.roomMember.findUnique({
+        where: {
+          userId_roomId: {
+            userId,
+            roomId,
+          },
+        },
+      });
+
+      if (existingMember) {
+        throw new ApiError(400, "Already joined this room");
+      }
+
+      await tx.roomMember.create({
+        data: {
           userId,
           roomId,
         },
-      },
+      });
+
+      const updated = await tx.room.updateMany({
+        where: {
+          id: roomId,
+          memberCount: {
+            lt: 100,
+          },
+        },
+        data: {
+          memberCount: {
+            increment: 1,
+          },
+        },
+      });
+
+      if (updated.count === 0) {
+        throw new ApiError(400, "Room is full");
+      }
     });
-    if (existingMember) {
-      throw new ApiError(400, "Already joined this room");
-    }
-    if (room.memberCount >= 100) {
-      throw new ApiError(400, "Room is full");
-    }
-    await prisma.roomMember.create({
-      data: {
-        userId,
-        roomId,
-      },
-    });
-    await prisma.room.update({
-      where: { id: roomId },
-      data: { memberCount: { increment: 1 } },
-    });
+
     return res.status(200).json({
       message: "Joined room successfully",
     });

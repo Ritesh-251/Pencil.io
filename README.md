@@ -1,158 +1,264 @@
-# MyPencil.io
+# Pencil.io
 
-## Stage 6 media env
+Jai Gurudev
 
-Set these before using the new video/audio room flow:
+Pencil.io is a real-time collaborative learning and creation platform where participants can draw, chat, and have full video conferencing at the same time. Multiple users join shared rooms to collaborate on a live canvas, communicate via chat, and talk face-to-face with a feature-rich media layer comparable to Zoom and Google Meet.
 
-```sh
-LIVEKIT_URL=wss://your-livekit-host
-LIVEKIT_API_KEY=your_api_key
-LIVEKIT_API_SECRET=your_api_secret
-LIVEKIT_TOKEN_TTL=2h
+---
+
+## What This App Does
+
+- **Live collaborative canvas** — draw, annotate, add shapes, arrows, sticky notes and images; all synced in real time across every participant
+- **Real-time chat** — room-wide messaging with presence indicators
+- **Full-featured video conferencing** — camera, microphone, screen sharing, and advanced interaction tools (see Media Features below)
+- **Event-driven backend** — reliable multi-user sync through a distributed message queue  
+- **AI-assisted context** — transcript and summarisation support during live sessions
+
+---
+
+## Media / Video Features
+
+The media layer is built on LiveKit and supports a full Zoom/Meet-comparable feature set:
+
+| Feature | Details |
+|---|---|
+| **Active speaker highlight** | Speaking participants get a pulsing green ring on their tile in real time |
+| **Raise hand** | Data-channel signalling; hand badge appears on tile for all participants, auto-lowers after 60 s |
+| **Emoji reactions** | Floating emoji animations (`floatUp` CSS keyframes) rendered above participant tiles |
+| **Noise suppression** | Krisp AI noise filter (`@livekit/krisp-noise-filter`) toggled per-session |
+| **Multi-screenshare** | Multiple presenters simultaneously; tab bar to switch the spotlight view |
+| **Participant pin** | Hover any tile → pin button appears; pinned participant shown in full spotlight, others in thumbnail strip |
+| **Picture-in-Picture** | Document PiP (Chrome 116+) or video PiP fallback; full carousel inside the PiP window |
+| **PiP carousel** | ‹ › arrows + dot indicators navigate between screenshare and all camera tiles; Pin/Unpin inside PiP works independently for screenshares too |
+
+---
+
+## Architecture At A Glance
+
+The system is split into two main backend services connected through an event-driven core.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Next.js Frontend                    │
+│  Canvas (custom 2D engine)  │  Chat  │  Media (LiveKit) │
+└──────────────────┬──────────────────────────────────────┘
+                   │  HTTP + WebSocket
+      ┌────────────┴────────────┐
+      │                         │
+┌─────┴──────┐        ┌────────┴────────┐
+│ http-backend│        │  ws-backend     │
+│ auth, rooms │        │  sockets, CRDT  │
+│ media tokens│        │  canvas / chat  │
+└─────┬──────┘        └────────┬────────┘
+      │                         │
+      └──────────┬──────────────┘
+                 │
+     ┌───────────┴───────────────┐
+     │      Shared Infra         │
+     │  RabbitMQ · Redis         │
+     │  Postgres (Prisma)        │
+     │  LiveKit (media server)   │
+     └───────────────────────────┘
 ```
 
-`http-backend` now mints LiveKit room tokens only after checking the authenticated user is a room member. The `web` app uses those short-lived tokens to join the room media session.
+- **HTTP backend** — authentication, room APIs, LiveKit media token minting
+- **WebSocket backend** — socket lifecycle, room presence, CRDT canvas sync, chat fan-out
+- **RabbitMQ** — async event flow between services (email workers, replay, processing)
+- **Redis** — pub/sub and fast cross-process coordination
+- **Postgres + Prisma** — durable persistence and recoverability
+- **LiveKit** — E2E-encrypted real-time media transport (audio/video/screenshare/data channels)
 
-For local development, the new `livekit` service in [`docker-compose.yml`](/Users/riteshhooda/Desktop/Pencil.io/docker-compose.yml) runs LiveKit in dev mode, so the matching backend values are:
+---
 
-```sh
+## Repository Layout
+
+```text
+apps/
+  web/              # Next.js 16 frontend (App Router)
+  http-backend/     # Express — auth, room/media token endpoints
+  ws-backend/       # ws — realtime sockets, handlers, event routing
+
+packages/
+  auth/             # JWT / password helpers
+  db/               # Prisma schema, migrations, db client
+  redis/            # Shared Redis and pub/sub wrappers
+  validation/       # Shared request/event validation schemas
+  ui/               # Shared React UI components
+  eslint-config/    # Lint rules
+  typescript-config/
+```
+
+---
+
+## Tech Stack
+
+### Monorepo & Tooling
+- **Turborepo** — task orchestration and caching
+- **pnpm workspaces** — package management
+- **TypeScript** — across all apps and packages
+- **ESLint + Prettier** — code quality
+
+### Frontend
+- **Next.js 16** (App Router)
+- **React 19**
+- **Zustand** — client state management
+- **TailwindCSS + PostCSS**
+- **livekit-client** — media room SDK
+- **@livekit/krisp-noise-filter** — AI noise suppression
+
+### Backend
+- **Node.js + TypeScript**
+- **Express** (HTTP backend)
+- **ws** (WebSocket backend)
+- **amqplib** — RabbitMQ client
+- **pino** — structured logging
+- **jsonwebtoken** — auth token handling
+
+### Data & Media
+- **Prisma ORM + PostgreSQL** — persistence
+- **LiveKit** — media server + client SDK
+- **Redis** — pub/sub, ephemeral state
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 18+
+- pnpm 9+
+- Docker and Docker Compose
+
+### 1. Install dependencies
+
+```bash
+pnpm install
+```
+
+### 2. Start infrastructure services
+
+```bash
+docker compose up -d
+```
+
+This starts PostgreSQL, Redis, RabbitMQ, and the local LiveKit server.
+
+### 3. Run database migrations
+
+```bash
+cd packages/db && pnpm prisma migrate dev
+```
+
+### 4. Run all applications
+
+```bash
+pnpm run dev
+```
+
+Turborepo starts all apps concurrently:
+
+| App | Default port |
+|---|---|
+| `web` (Next.js) | 3000 |
+| `http-backend` | 3001 |
+| `ws-backend` | 3003 |
+| LiveKit (Docker) | 7880 |
+
+### 5. Useful scripts
+
+```bash
+pnpm run build         # production build (all apps)
+pnpm run lint          # lint all packages
+pnpm run check-types   # TypeScript type-check all packages
+pnpm run format        # Prettier format
+```
+
+---
+
+## Environment Configuration
+
+Copy `.env.example` to `.env.local` (web) and `.env` (backends) and fill in:
+
+### Core (all backends)
+
+```bash
+NODE_ENV=development
+DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<db>
+REDIS_URL=redis://localhost:6379
+RABBITMQ_URL=amqp://localhost:5672
+```
+
+### LiveKit (http-backend + web)
+
+```bash
 LIVEKIT_URL=ws://localhost:7880
 LIVEKIT_API_KEY=devkey
 LIVEKIT_API_SECRET=secret
+LIVEKIT_TOKEN_TTL=2h
+NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880
 ```
 
-LiveKit's official local mode binds its signal server to `127.0.0.1:7880` by default, so the compose file explicitly binds it to `0.0.0.0` for host access.
+The HTTP backend mints short-lived media tokens after validating room membership. The frontend uses these tokens to connect directly to the LiveKit server — media streams never pass through the application backend.
 
-This Turborepo starter is maintained by the Turborepo core team.
+---
 
-## Using this example
-
-Run the following command:
-
-```sh
-npx create-turbo@latest
-```
-
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
+## Realtime Flow (Simplified)
 
 ```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+1. User action (canvas draw / chat message / media toggle) on frontend
+2. Event sent to ws-backend over WebSocket
+3. ws-backend normalises event → publishes to RabbitMQ
+4. Consumer validates → writes to Postgres (durable state)
+5. ws-backend broadcasts update to all room participants
+6. Canvas CRDT reconciles concurrent edits deterministically
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Media (audio/video) travels directly between clients via LiveKit's WebRTC transport — it is never routed through the application backend.
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+---
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+## Canvas Architecture
 
-### Develop
+The canvas is a custom 2D engine built on the native HTML `<canvas>` API (no Fabric.js or Konva dependency):
 
-To develop all apps and packages, run the following command:
+- **Rendering** — a single `useEffect` runs a full redraw pass on every state change using a `drawAllRef` pattern; the ResizeObserver calls the same pass after any layout reflow so content is never lost when panels toggle
+- **CRDT sync** — object state is held in a Zustand store; incoming WS events are merged with HLC timestamps for conflict-free resolution
+- **Tools** — pan/zoom, pen, eraser, arrow, rectangle, ellipse, text (multi-line), sticky note, image upload
 
-```
-cd my-turborepo
+---
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
+## CI/CD Expectations
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
+**Continuous integration** should run on every pull request:
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+- `pnpm install` — dependency resolution
+- `pnpm lint` — lint all packages
+- `pnpm check-types` — TypeScript validation
+- `pnpm build` — production build
+- `prisma validate` — schema sanity check
 
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
+**Continuous delivery**:
 
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+- Build and push Docker images per service
+- Deploy to target environment
+- Run health checks post-deploy
+- Rollback automatically on failure
 
-### Remote Caching
+---
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+## Reliability Principles
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+- **Event-first** consistency — no direct write shortcuts that bypass the event queue
+- **Replayability** — shared state can be reconstructed from the event log
+- **Service isolation** — services communicate via queues, not direct calls
+- **Observability by default** — structured logging with `pino`, errors always surfaced with context
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+---
 
-```
-cd my-turborepo
+## Notes For Contributors
 
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- Never bypass the event flow for realtime features — always publish through RabbitMQ
+- Keep canvas CRDT logic deterministic; test concurrent edits before merging
+- Media features go in `apps/web/src/components/workspace/MediaPanel.tsx` and `apps/web/src/lib/livekit.ts`
+- New environment variables must be documented here and added to `.env.example`
+- Add TypeScript types for all new WS event payloads in the `validation` package

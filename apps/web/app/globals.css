@@ -485,3 +485,50 @@
     height: auto !important;
   }
 }
+
+/* ── Media Panel ─────────────────────────────────────────────────────────── */
+
+/* Reaction emoji floats up and fades — span sits OUTSIDE overflow-hidden clip box */
+@keyframes mediaReactionFloat {
+  0%   { opacity: 1;   transform: translateX(-50%) translateY(0)      scale(1);    }
+  55%  { opacity: 1;   transform: translateX(-50%) translateY(-75px)   scale(1.4);  }
+  100% { opacity: 0;   transform: translateX(-50%) translateY(-115px)  scale(0.85); }
+}
+
+.media-reaction-bubble {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  font-size: 2rem;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  z-index: 40;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.5));
+  animation: mediaReactionFloat 2.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Active speaker glow ring on the tile outer shell */
+@keyframes speakerPulse {
+  0%, 100% { box-shadow: 0 0 0 2.5px rgba(34, 197, 94, 0.9),  0 0 16px rgba(34, 197, 94, 0.3); }
+  50%       { box-shadow: 0 0 0 2.5px rgba(34, 197, 94, 0.35), 0 0 6px  rgba(34, 197, 94, 0.1); }
+}
+.media-speaking { animation: speakerPulse 1.6s ease-in-out infinite; }
+
+/* Pinned tile — blue outline */
+.media-pinned {
+  box-shadow: 0 0 0 2.5px rgba(13, 91, 215, 0.85), 0 0 14px rgba(13, 91, 215, 0.25);
+}
+
+/* Pin button — appears on tile hover */
+.media-tile-pin-btn {
+  opacity: 0;
+  transition: opacity 140ms ease, transform 140ms ease;
+  transform: scale(0.8);
+}
+.media-tile:hover .media-tile-pin-btn,
+.media-tile:focus-within .media-tile-pin-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+

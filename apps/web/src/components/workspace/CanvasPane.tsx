@@ -119,6 +119,14 @@ const FONT_OPTIONS = [
 
 const DEFAULT_FONT_FAMILY = FONT_OPTIONS[0].family;
 
+const STROKE_STYLE_OPTIONS = [
+  { id: 'sharp', label: 'Sharp' },
+  { id: 'smooth', label: 'Smooth' },
+  { id: 'fluid', label: 'Fluid' },
+] as const;
+
+type StrokeStyle = 'sharp' | 'smooth' | 'fluid';
+
 function measureTextBounds(value: string, fontSize: number) {
   const lines = value.split(/\n/g);
   const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
@@ -223,6 +231,7 @@ export const CanvasPane = () => {
   const [brushSize, setBrushSize] = useState(3);
   const [textSize, setTextSize] = useState<number>(TEXT_SIZE_OPTIONS[1]);
   const [textFont, setTextFont] = useState<string>(DEFAULT_FONT_FAMILY);
+  const [strokeStyle, setStrokeStyle] = useState<StrokeStyle>('smooth');
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [caretVisible, setCaretVisible] = useState(true);
   const [editingObject, setEditingObject] = useState<ObjectEditDraft | null>(null);
@@ -811,26 +820,54 @@ export const CanvasPane = () => {
       ctx.lineWidth = Math.max(1, width);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.moveTo(points[0].x, points[0].y);
 
-      // Quadratic Bézier midpoint smoothing — produces Excalidraw-quality curves
-      // from raw pointer samples without any additional data
-      if (points.length === 2) {
-        ctx.lineTo(points[1].x, points[1].y);
-      } else {
-        for (let i = 1; i < points.length - 1; i += 1) {
-          const curr = points[i];
-          const next = points[i + 1];
-          if (typeof curr?.x !== 'number' || typeof curr?.y !== 'number') continue;
-          if (typeof next?.x !== 'number' || typeof next?.y !== 'number') continue;
-          const midX = (curr.x + next.x) / 2;
-          const midY = (curr.y + next.y) / 2;
-          ctx.quadraticCurveTo(curr.x, curr.y, midX, midY);
+      const style: StrokeStyle = obj.strokeStyle || 'smooth';
+
+      if (style === 'sharp') {
+        // Raw segments — no smoothing
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i += 1) {
+          const p = points[i];
+          if (typeof p?.x === 'number' && typeof p?.y === 'number') ctx.lineTo(p.x, p.y);
         }
-        // Final segment to exact last point
-        const last = points[points.length - 1];
-        if (typeof last?.x === 'number' && typeof last?.y === 'number') {
-          ctx.lineTo(last.x, last.y);
+      } else if (style === 'fluid') {
+        // Catmull-Rom spline — the smoothest option, produces very flowing curves
+        ctx.moveTo(points[0].x, points[0].y);
+        if (points.length === 2) {
+          ctx.lineTo(points[1].x, points[1].y);
+        } else {
+          // Catmull-Rom to cubic Bézier conversion (tension = 0 = uniform)
+          const tension = 6; // higher = tighter fit to control points
+          for (let i = 0; i < points.length - 1; i += 1) {
+            const p0 = points[Math.max(0, i - 1)];
+            const p1 = points[i];
+            const p2 = points[Math.min(points.length - 1, i + 1)];
+            const p3 = points[Math.min(points.length - 1, i + 2)];
+            if (!p0 || !p1 || !p2 || !p3) continue;
+            const cp1x = p1.x + (p2.x - p0.x) / tension;
+            const cp1y = p1.y + (p2.y - p0.y) / tension;
+            const cp2x = p2.x - (p3.x - p1.x) / tension;
+            const cp2y = p2.y - (p3.y - p1.y) / tension;
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+          }
+        }
+      } else {
+        // 'smooth' — Quadratic Bézier midpoint (Excalidraw-style)
+        ctx.moveTo(points[0].x, points[0].y);
+        if (points.length === 2) {
+          ctx.lineTo(points[1].x, points[1].y);
+        } else {
+          for (let i = 1; i < points.length - 1; i += 1) {
+            const curr = points[i];
+            const next = points[i + 1];
+            if (typeof curr?.x !== 'number' || typeof curr?.y !== 'number') continue;
+            if (typeof next?.x !== 'number' || typeof next?.y !== 'number') continue;
+            const midX = (curr.x + next.x) / 2;
+            const midY = (curr.y + next.y) / 2;
+            ctx.quadraticCurveTo(curr.x, curr.y, midX, midY);
+          }
+          const last = points[points.length - 1];
+          if (typeof last?.x === 'number' && typeof last?.y === 'number') ctx.lineTo(last.x, last.y);
         }
       }
       ctx.stroke();
@@ -1788,6 +1825,20 @@ export const CanvasPane = () => {
     e.currentTarget.setPointerCapture(e.pointerId);
     drawGroupIdRef.current = nextHistoryGroupId();
     draftRef.current = { objectId, tool: 'draw', startX: x, startY: y, lastEmitAt: 0 };
+
+    // Create ONE stroke object immediately — points accumulate during pointer move
+    const initProps = {
+      id: objectId,
+      type: 'stroke',
+      x,
+      y,
+      color: strokeColor,
+      width: brushSize,
+      strokeStyle,
+      points: [{ x, y }],
+    };
+    upsertObject(objectId, initProps);
+    sendCanvasEvent(objectId, 'CREATE_OBJECT', 'stroke', initProps);
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1841,15 +1892,7 @@ export const CanvasPane = () => {
           });
         }
 
-        // Throttled broadcast
-        const now = Date.now();
-        if (now - (gd.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
-          groupDragRef.current = { ...gd, lastEmitAt: now };
-          gd.snapshots.forEach(({ id }) => {
-            const latest = objects.get(id);
-            if (latest) sendCanvasEvent(id, 'UPDATE_OBJECT', latest.type || 'shape', latest);
-          });
-        }
+        // No broadcast during drag — only broadcast on pointer up to avoid rate limiting
         return;
       }
 
@@ -1892,31 +1935,24 @@ export const CanvasPane = () => {
     if (now - (draft.lastEmitAt ?? 0) < CANVAS_EMIT_INTERVAL_MS) return;
 
     if (draft.tool === 'draw') {
-      const segmentId = `stroke-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      const points = [
-        { x: draft.startX, y: draft.startY },
-        { x, y },
-      ];
+      // Append the new point to the existing stroke object (not a new segment)
+      const existing = objects.get(draft.objectId);
+      const pts = Array.isArray(existing?.points) ? [...existing.points] : [{ x: draft.startX, y: draft.startY }];
+      pts.push({ x, y });
 
       const props = {
-        id: segmentId,
+        ...existing,
+        id: draft.objectId,
         type: 'stroke',
-        x,
-        y,
         color: strokeColor,
         width: brushSize,
-        points,
+        strokeStyle: existing?.strokeStyle || strokeStyle,
+        points: pts,
       };
 
-      draftRef.current = { ...draft, startX: x, startY: y, lastEmitAt: now };
-      upsertObject(segmentId, props);
-      sendCanvasEvent(segmentId, 'CREATE_OBJECT', 'stroke', props);
-      recordHistory({
-        objectId: segmentId,
-        before: null,
-        after: cloneHistoryObject(props),
-        groupId: drawGroupIdRef.current || undefined,
-      });
+      draftRef.current = { ...draft, lastEmitAt: now };
+      upsertObject(draft.objectId, props);
+      sendCanvasEvent(draft.objectId, 'UPDATE_OBJECT', 'stroke', props);
       return;
     }
 
@@ -2008,6 +2044,19 @@ export const CanvasPane = () => {
       }
       selectionBoxRef.current = null;
       setSelectionBox(null);
+    }
+
+    if (draftRef.current && draftRef.current.tool === 'draw') {
+      const objectId = draftRef.current.objectId;
+      const latest = objects.get(objectId);
+      if (latest) {
+        recordHistory({
+          objectId,
+          before: null,
+          after: cloneHistoryObject(latest),
+          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+        });
+      }
     }
 
     if (draftRef.current && (draftRef.current.tool === 'arrow' || draftRef.current.tool === 'rectangle' || draftRef.current.tool === 'ellipse')) {
@@ -2268,6 +2317,20 @@ export const CanvasPane = () => {
               value={brushSize}
               onChange={(e) => setBrushSize(Number(e.target.value))}
             />
+
+            <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">Stroke</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {STROKE_STYLE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`rounded-[10px] border px-2 py-1.5 text-[0.68rem] font-semibold transition duration-150 ${strokeStyle === opt.id ? 'border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_18px_rgba(13,91,215,.24)]' : 'border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:bg-[rgba(26,26,26,.05)]'}`}
+                  onClick={() => setStrokeStyle(opt.id as StrokeStyle)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
 
             <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">Text Size</label>
             <div className="grid grid-cols-3 gap-1.5">

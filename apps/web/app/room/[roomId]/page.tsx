@@ -535,8 +535,17 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         <div
           className="workspace-canvas-pane relative min-h-0 min-w-0 overflow-hidden rounded-[20px]"
           style={{
-            display: showCanvas ? undefined : 'none',
-            flex: showCanvas ? (showSidebar ? '1 1 0%' : '1 1 100%') : undefined,
+            // IMPORTANT: do NOT use display:none here.
+            // The canvas uses a ResizeObserver on its container.
+            // display:none makes getBoundingClientRect() return {width:0,height:0}
+            // which resets canvas.width/height to 1, clearing the pixel buffer.
+            // Instead, keep the element in layout flow but hide it visually.
+            visibility: showCanvas ? 'visible' : 'hidden',
+            pointerEvents: showCanvas ? undefined : 'none',
+            flex: showCanvas ? (showSidebar ? '1 1 0%' : '1 1 100%') : '0 0 0px',
+            width: showCanvas ? undefined : 0,
+            minWidth: 0,
+            overflow: 'hidden',
           }}
         >
           {canvasError && (

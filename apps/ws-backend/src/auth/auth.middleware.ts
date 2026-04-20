@@ -1,4 +1,5 @@
 import { verifyToken } from "@repo/auth";
+import { logger } from "../infra/logger";
 
 export function verifySocketToken(token: string) {
   try {
@@ -16,6 +17,7 @@ export function verifySocketToken(token: string) {
     }
     return userId;
   } catch (error) {
-    throw new Error("System went wrong here");
+    logger.error({ err: error }, "Socket auth verification failed")
+    throw error instanceof Error ? error : new Error("Invalid token")
   }
 }

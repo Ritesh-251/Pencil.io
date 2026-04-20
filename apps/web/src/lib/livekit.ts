@@ -38,6 +38,41 @@ export function createMediaRoom() {
   });
 }
 
+// ─── Data-channel message types ───────────────────────────────────────────────
+
+export type DataMessageRaiseHand = { type: 'raise-hand'; raised: boolean };
+export type DataMessageReaction  = { type: 'reaction';   emoji: string };
+export type DataMessage = DataMessageRaiseHand | DataMessageReaction;
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+export function publishRaiseHand(room: Room, raised: boolean) {
+  const msg: DataMessageRaiseHand = { type: 'raise-hand', raised };
+  void room.localParticipant.publishData(
+    encoder.encode(JSON.stringify(msg)),
+    { reliable: true },
+  );
+}
+
+export function publishReaction(room: Room, emoji: string) {
+  const msg: DataMessageReaction = { type: 'reaction', emoji };
+  void room.localParticipant.publishData(
+    encoder.encode(JSON.stringify(msg)),
+    { reliable: false },
+  );
+}
+
+export function parseDataMessage(payload: Uint8Array): DataMessage | null {
+  try {
+    const parsed = JSON.parse(decoder.decode(payload)) as unknown;
+    if (typeof parsed === 'object' && parsed !== null && 'type' in parsed) {
+      return parsed as DataMessage;
+    }
+  } catch { /* ignore malformed */ }
+  return null;
+}
+
 export async function requestMediaToken(roomId: string) {
   return api.post(`/api/v1/rooms/${roomId}/media/token`) as Promise<MediaTokenResponse>;
 }

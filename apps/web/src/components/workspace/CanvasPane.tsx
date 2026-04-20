@@ -56,11 +56,21 @@ type DragState = {
   lastEmitAt?: number;
 };
 
+type GroupDragState = {
+  handle: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+  pointerStartX: number;
+  pointerStartY: number;
+  snapshots: Array<{ id: string; obj: Record<string, any> }>;
+  unionStart: { left: number; top: number; right: number; bottom: number; width: number; height: number };
+  lastEmitAt?: number;
+};
+
 type TextDraft = {
   x: number;
   y: number;
   value: string;
   fontSize: number;
+  fontFamily: string;
 };
 
 type ViewState = {
@@ -99,6 +109,15 @@ const MAX_ZOOM = 3;
 const ERASER_RADIUS = 14;
 const HANDLE_SIZE = 10;
 const TEXT_SIZE_OPTIONS = [16, 22, 30] as const;
+
+const FONT_OPTIONS = [
+  { id: 'sketch', label: 'Sketch', family: '"Virgil", "Comic Sans MS", "Bradley Hand", cursive' },
+  { id: 'sans',   label: 'Sans',   family: 'Inter, system-ui, -apple-system, sans-serif' },
+  { id: 'serif',  label: 'Serif',  family: 'Georgia, "Times New Roman", "Palatino Linotype", serif' },
+  { id: 'mono',   label: 'Mono',   family: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace' },
+] as const;
+
+const DEFAULT_FONT_FAMILY = FONT_OPTIONS[0].family;
 
 function measureTextBounds(value: string, fontSize: number) {
   const lines = value.split(/\n/g);
@@ -188,6 +207,7 @@ export const CanvasPane = () => {
   const panStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
   const draftRef = useRef<DraftState | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const groupDragRef = useRef<GroupDragState | null>(null);
   const historyUndoRef = useRef<HistoryEntry[]>([]);
   const historyRedoRef = useRef<HistoryEntry[]>([]);
   const historyApplyRef = useRef(false);
@@ -202,6 +222,7 @@ export const CanvasPane = () => {
   const [strokeColor, setStrokeColor] = useState('#0d5bd7');
   const [brushSize, setBrushSize] = useState(3);
   const [textSize, setTextSize] = useState<number>(TEXT_SIZE_OPTIONS[1]);
+  const [textFont, setTextFont] = useState<string>(DEFAULT_FONT_FAMILY);
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [caretVisible, setCaretVisible] = useState(true);
   const [editingObject, setEditingObject] = useState<ObjectEditDraft | null>(null);
@@ -565,6 +586,7 @@ export const CanvasPane = () => {
       text: value,
       color: strokeColor,
       fontSize,
+      fontFamily: textDraft.fontFamily || DEFAULT_FONT_FAMILY,
       width: bounds.width,
       height: bounds.height,
     };
@@ -666,7 +688,8 @@ export const CanvasPane = () => {
       const lines = obj.text.split(/\n/g);
       ctx.fillStyle = color;
       ctx.textBaseline = 'top';
-      ctx.font = `${fontSize}px "Virgil", "Comic Sans MS", "Bradley Hand", cursive`;
+      const fontFamily = typeof obj.fontFamily === 'string' ? obj.fontFamily : DEFAULT_FONT_FAMILY;
+      ctx.font = `${fontSize}px ${fontFamily}`;
       const lineHeight = Math.round(fontSize * 1.24);
       lines.forEach((line: string, index: number) => {
         ctx.fillText(line, obj.x, obj.y + index * lineHeight);
@@ -789,10 +812,26 @@ export const CanvasPane = () => {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i += 1) {
-        const point = points[i];
-        if (typeof point?.x !== 'number' || typeof point?.y !== 'number') continue;
-        ctx.lineTo(point.x, point.y);
+
+      // Quadratic Bézier midpoint smoothing — produces Excalidraw-quality curves
+      // from raw pointer samples without any additional data
+      if (points.length === 2) {
+        ctx.lineTo(points[1].x, points[1].y);
+      } else {
+        for (let i = 1; i < points.length - 1; i += 1) {
+          const curr = points[i];
+          const next = points[i + 1];
+          if (typeof curr?.x !== 'number' || typeof curr?.y !== 'number') continue;
+          if (typeof next?.x !== 'number' || typeof next?.y !== 'number') continue;
+          const midX = (curr.x + next.x) / 2;
+          const midY = (curr.y + next.y) / 2;
+          ctx.quadraticCurveTo(curr.x, curr.y, midX, midY);
+        }
+        // Final segment to exact last point
+        const last = points[points.length - 1];
+        if (typeof last?.x === 'number' && typeof last?.y === 'number') {
+          ctx.lineTo(last.x, last.y);
+        }
       }
       ctx.stroke();
     }
@@ -1023,6 +1062,96 @@ export const CanvasPane = () => {
     }
 
     return null;
+  };
+
+  const getUnionBounds = (ids: string[]) => {
+    let uL = Infinity, uT = Infinity, uR = -Infinity, uB = -Infinity;
+    for (const id of ids) {
+      const obj = objects.get(id);
+      if (!obj || obj.deleted) continue;
+      const b = getObjectBounds(obj);
+      if (!b) continue;
+      uL = Math.min(uL, b.left); uT = Math.min(uT, b.top);
+      uR = Math.max(uR, b.right); uB = Math.max(uB, b.bottom);
+    }
+    if (!Number.isFinite(uL)) return null;
+    return { left: uL, top: uT, right: uR, bottom: uB, width: uR - uL, height: uB - uT };
+  };
+
+  const hitTestGroupHandle = (x: number, y: number, ids: string[]): GroupDragState['handle'] | null => {
+    if (ids.length < 2) return null;
+    const union = getUnionBounds(ids);
+    if (!union) return null;
+    const handleRadius = Math.max(8, HANDLE_SIZE / view.scale);
+    const cx = (union.left + union.right) / 2;
+    const cy = (union.top + union.bottom) / 2;
+    const handles: Array<{ key: GroupDragState['handle']; hx: number; hy: number }> = [
+      { key: 'nw', hx: union.left, hy: union.top },
+      { key: 'n',  hx: cx, hy: union.top },
+      { key: 'ne', hx: union.right, hy: union.top },
+      { key: 'e',  hx: union.right, hy: cy },
+      { key: 'se', hx: union.right, hy: union.bottom },
+      { key: 's',  hx: cx, hy: union.bottom },
+      { key: 'sw', hx: union.left, hy: union.bottom },
+      { key: 'w',  hx: union.left, hy: cy },
+    ];
+    for (const h of handles) {
+      const dx = x - h.hx, dy = y - h.hy;
+      if (dx * dx + dy * dy <= handleRadius * handleRadius) return h.key;
+    }
+    return null;
+  };
+
+  const buildGroupResized = (
+    snapshots: GroupDragState['snapshots'],
+    unionStart: GroupDragState['unionStart'],
+    pointerX: number,
+    pointerY: number,
+    handle: GroupDragState['handle'],
+  ) => {
+    // Compute new union bounds based on handle drag
+    let nL = unionStart.left, nR = unionStart.right;
+    let nT = unionStart.top, nB = unionStart.bottom;
+    if (handle.includes('w')) nL = pointerX;
+    if (handle.includes('e')) nR = pointerX;
+    if (handle.includes('n')) nT = pointerY;
+    if (handle.includes('s')) nB = pointerY;
+    if (handle === 'n' || handle === 's') { nL = unionStart.left; nR = unionStart.right; }
+    if (handle === 'e' || handle === 'w') { nT = unionStart.top; nB = unionStart.bottom; }
+    // Normalize
+    const newLeft = Math.min(nL, nR), newRight = Math.max(nL, nR);
+    const newTop = Math.min(nT, nB), newBottom = Math.max(nT, nB);
+    const newW = Math.max(1, newRight - newLeft);
+    const newH = Math.max(1, newBottom - newTop);
+    const scaleX = newW / Math.max(1, unionStart.width);
+    const scaleY = newH / Math.max(1, unionStart.height);
+
+    return snapshots.map(({ id, obj }) => {
+      const next = { ...obj };
+      const type = next?.type ?? 'stroke';
+      // Scale position and dimensions relative to union origin
+      if (typeof next.x === 'number') {
+        next.x = newLeft + (next.x - unionStart.left) * scaleX;
+      }
+      if (typeof next.y === 'number') {
+        next.y = newTop + (next.y - unionStart.top) * scaleY;
+      }
+      if (typeof next.width === 'number') {
+        next.width = Math.max(1, next.width * scaleX);
+      }
+      if (typeof next.height === 'number') {
+        next.height = Math.max(1, next.height * scaleY);
+      }
+      // Scale stroke/arrow points
+      if ((type === 'stroke' || type === 'arrow' || type === 'line') && Array.isArray(next.points)) {
+        next.points = next.points.map((p) => ({
+          ...p,
+          x: typeof p?.x === 'number' ? newLeft + (p.x - unionStart.left) * scaleX : p?.x,
+          y: typeof p?.y === 'number' ? newTop + (p.y - unionStart.top) * scaleY : p?.y,
+        }));
+      }
+      return { id, obj: next };
+    });
   };
 
   const normalizeRect = (x1: number, y1: number, x2: number, y2: number) => {
@@ -1258,7 +1387,8 @@ export const CanvasPane = () => {
 
         ctx.save();
         ctx.fillStyle = strokeColor;
-        ctx.font = `${fontSize}px "Virgil", "Comic Sans MS", "Bradley Hand", cursive`;
+        const caretFontFamily = textDraft.fontFamily || DEFAULT_FONT_FAMILY;
+        ctx.font = `${fontSize}px ${caretFontFamily}`;
         const caretX = textDraft.x + ctx.measureText(lastLine).width + 1;
         const caretY = textDraft.y + (lines.length - 1) * lineHeight;
         ctx.fillRect(caretX, caretY, Math.max(1, Math.round(fontSize * 0.08)), Math.max(12, Math.round(fontSize * 1.08)));
@@ -1266,10 +1396,56 @@ export const CanvasPane = () => {
       }
     }
 
-    selectedObjectIdsRef.current.forEach((id) => {
-      const selected = objects.get(id);
+    // Smart selection overlay: 1 object = individual handles, 2+ = union bounding box
+    const selIds = selectedObjectIdsRef.current;
+    if (selIds.length === 1) {
+      const selected = objects.get(selIds[0]!);
       if (selected) drawSelectionOverlay(ctx, selected);
-    });
+    } else if (selIds.length > 1) {
+      // Compute union bounding box
+      let uL = Infinity, uT = Infinity, uR = -Infinity, uB = -Infinity;
+      selIds.forEach((id) => {
+        const obj = objects.get(id);
+        if (!obj || obj.deleted) return;
+        const b = getObjectBounds(obj);
+        if (!b) return;
+        uL = Math.min(uL, b.left); uT = Math.min(uT, b.top);
+        uR = Math.max(uR, b.right); uB = Math.max(uB, b.bottom);
+      });
+      if (Number.isFinite(uL)) {
+        const scale = view.scale;
+        const line = Math.max(1, 1.25 / Math.max(1, scale));
+        ctx.save();
+        ctx.strokeStyle = '#2563eb';
+        ctx.fillStyle = '#ffffff';
+        ctx.lineWidth = line;
+        ctx.setLineDash([6 / Math.max(1, scale), 4 / Math.max(1, scale)]);
+        ctx.strokeRect(uL, uT, uR - uL, uB - uT);
+        ctx.setLineDash([]);
+        // 8 handles on the union box
+        const cx = (uL + uR) / 2, cy = (uT + uB) / 2;
+        const handleSize = HANDLE_SIZE / Math.max(1, scale);
+        const drawH = (hx: number, hy: number) => {
+          ctx.beginPath();
+          ctx.rect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);
+          ctx.fill(); ctx.stroke();
+        };
+        drawH(uL, uT); drawH(cx, uT); drawH(uR, uT); drawH(uR, cy);
+        drawH(uR, uB); drawH(cx, uB); drawH(uL, uB); drawH(uL, cy);
+        // Dashed outlines for individual objects within the group
+        ctx.setLineDash([4 / Math.max(1, scale), 3 / Math.max(1, scale)]);
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.3)';
+        ctx.lineWidth = Math.max(0.5, 0.75 / Math.max(1, scale));
+        selIds.forEach((id) => {
+          const obj = objects.get(id);
+          if (!obj || obj.deleted) return;
+          const b = getObjectBounds(obj);
+          if (b) ctx.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
+        });
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
 
     if (selectionBox) {
       const left = Math.min(selectionBox.startX, selectionBox.endX);
@@ -1378,6 +1554,7 @@ export const CanvasPane = () => {
         y: worldY,
         value: initialValue,
         fontSize: textSize,
+        fontFamily: textFont,
       });
       isDrawing.current = false;
     };
@@ -1430,6 +1607,29 @@ export const CanvasPane = () => {
     }
 
     if (activeTool === 'select') {
+      // Group resize: when 2+ objects selected, check union box handles first
+      if (selectedObjectIdsRef.current.length >= 2) {
+        const groupHandle = hitTestGroupHandle(x, y, selectedObjectIdsRef.current);
+        if (groupHandle) {
+          const ids = selectedObjectIdsRef.current;
+          const union = getUnionBounds(ids);
+          if (union) {
+            const snaps = ids.map((id) => ({ id, obj: { ...objects.get(id) } })).filter((s) => s.obj);
+            e.currentTarget.setPointerCapture(e.pointerId);
+            groupDragRef.current = {
+              handle: groupHandle,
+              pointerStartX: x,
+              pointerStartY: y,
+              snapshots: snaps,
+              unionStart: union,
+              lastEmitAt: 0,
+            };
+            isDrawing.current = true;
+            return;
+          }
+        }
+      }
+
       const selectedHandle = hitTestHandle(x, y, selectedObjectIdRef.current);
       if (selectedHandle && selectedObjectIdRef.current) {
         const objectId = selectedObjectIdRef.current;
@@ -1465,6 +1665,27 @@ export const CanvasPane = () => {
         return;
       }
 
+      // If clicking on an object that's part of a multi-selection, move the whole group
+      if (selectedObjectIdsRef.current.length >= 2 && selectedObjectIdsRef.current.includes(objectId)) {
+        const ids = selectedObjectIdsRef.current;
+        const union = getUnionBounds(ids);
+        if (union) {
+          const snaps = ids.map((id) => ({ id, obj: { ...objects.get(id) } })).filter((s) => s.obj);
+          e.currentTarget.setPointerCapture(e.pointerId);
+          groupDragRef.current = {
+            handle: 'se', // placeholder — we detect mode='move' by absence of handle usage
+            pointerStartX: x,
+            pointerStartY: y,
+            snapshots: snaps,
+            unionStart: union,
+            lastEmitAt: 0,
+          };
+          // Mark as group-move by setting handle to undefined-ish — we'll detect via a flag
+          (groupDragRef.current as any)._isGroupMove = true;
+          isDrawing.current = true;
+          return;
+        }
+      }
       beginSelectInteraction(objectId, { allowInlineEditOnDoubleClick: true });
       return;
     }
@@ -1599,6 +1820,39 @@ export const CanvasPane = () => {
     }
 
     if (activeTool === 'select') {
+      // Group drag (resize or move)
+      if (groupDragRef.current) {
+        const gd = groupDragRef.current;
+        const isGroupMove = (gd as any)._isGroupMove === true;
+
+        if (isGroupMove) {
+          // Group move — translate all objects by pointer delta
+          const dx = x - gd.pointerStartX;
+          const dy = y - gd.pointerStartY;
+          gd.snapshots.forEach(({ id, obj }) => {
+            const moved = buildMovedObject(obj, dx, dy);
+            upsertObject(id, moved);
+          });
+        } else {
+          // Group resize — proportional scaling
+          const results = buildGroupResized(gd.snapshots, gd.unionStart, x, y, gd.handle);
+          results.forEach(({ id, obj }) => {
+            upsertObject(id, obj);
+          });
+        }
+
+        // Throttled broadcast
+        const now = Date.now();
+        if (now - (gd.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+          groupDragRef.current = { ...gd, lastEmitAt: now };
+          gd.snapshots.forEach(({ id }) => {
+            const latest = objects.get(id);
+            if (latest) sendCanvasEvent(id, 'UPDATE_OBJECT', latest.type || 'shape', latest);
+          });
+        }
+        return;
+      }
+
       if (selectionBoxRef.current) {
         const nextBox = {
           ...selectionBoxRef.current,
@@ -1710,6 +1964,25 @@ export const CanvasPane = () => {
     isPanningRef.current = false;
     panStartRef.current = null;
 
+    // Group drag commit
+    if (activeTool === 'select' && groupDragRef.current) {
+      const gd = groupDragRef.current;
+      const groupId = nextHistoryGroupId();
+      gd.snapshots.forEach(({ id, obj: before }) => {
+        const latest = objects.get(id);
+        if (latest) {
+          sendCanvasEvent(id, 'UPDATE_OBJECT', latest.type || 'shape', latest);
+          recordHistory({
+            objectId: id,
+            before: cloneHistoryObject(before),
+            after: cloneHistoryObject(latest),
+            groupId,
+          });
+        }
+      });
+      groupDragRef.current = null;
+    }
+
     if (activeTool === 'select' && dragRef.current) {
       const drag = dragRef.current;
       const latest = objects.get(drag.objectId);
@@ -1756,6 +2029,7 @@ export const CanvasPane = () => {
     drawGroupIdRef.current = null;
     draftRef.current = null;
     dragRef.current = null;
+    groupDragRef.current = null;
   };
 
   const onDoubleClick = (e: ReactMouseEvent<HTMLCanvasElement>) => {
@@ -1781,7 +2055,7 @@ export const CanvasPane = () => {
     // Excalidraw-like text behavior: double-click anywhere creates a text draft at pointer.
     setActiveTool('text');
     setEditingObject(null);
-    setTextDraft({ x, y, value: '', fontSize: textSize });
+    setTextDraft({ x, y, value: '', fontSize: textSize, fontFamily: textFont });
   };
 
   useEffect(() => {
@@ -1796,7 +2070,7 @@ export const CanvasPane = () => {
           const centerX = (containerRef.current?.clientWidth || 400) / 2;
           const centerY = (containerRef.current?.clientHeight || 300) / 2;
           const world = screenToWorld(centerX, centerY);
-          setTextDraft({ x: world.x, y: world.y, value: e.key, fontSize: textSize });
+          setTextDraft({ x: world.x, y: world.y, value: e.key, fontSize: textSize, fontFamily: textFont });
           return;
         }
       }
@@ -1862,13 +2136,14 @@ export const CanvasPane = () => {
             onChange={(e) => setTextDraft((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
             onBlur={commitTextDraft}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              // Enter = new line (natural textarea behaviour), Shift+Enter = commit
+              if (e.key === 'Enter' && e.shiftKey) {
                 e.preventDefault();
                 commitTextDraft();
               }
               if (e.key === 'Escape') {
                 e.preventDefault();
-                setTextDraft(null);
+                commitTextDraft();
               }
             }}
             rows={1}
@@ -1906,8 +2181,24 @@ export const CanvasPane = () => {
             ))}
           </div>
 
-          <div className="rounded-md border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.8)] px-2 py-1 text-[0.65rem] text-[var(--ink-soft)]">
-            Wheel: pan canvas, Cmd/Ctrl + wheel: zoom, drag empty area in Select to multi-select, Delete/Backspace removes selected.
+          <div className="group relative flex items-center">
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-[rgba(26,26,26,.18)] bg-[rgba(255,250,241,.8)] text-[0.7rem] font-bold text-[var(--ink-soft)] transition hover:bg-[rgba(13,91,215,.12)] hover:text-[var(--brand-strong)]"
+              title="Keyboard shortcuts"
+            >
+              ?
+            </button>
+            <div className="pointer-events-none absolute left-8 top-0 z-50 hidden w-[200px] rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.97)] p-2 text-[0.62rem] leading-[1.5] text-[var(--ink-soft)] shadow-lg group-hover:pointer-events-auto group-hover:block">
+              <strong>Shortcuts</strong><br/>
+              Wheel: pan canvas<br/>
+              Cmd/Ctrl + wheel: zoom<br/>
+              Drag empty area: multi-select<br/>
+              Delete/Backspace: remove selected<br/>
+              Enter: new line in text<br/>
+              Shift+Enter: commit text<br/>
+              Cmd+Z: undo &middot; Cmd+Shift+Z: redo
+            </div>
           </div>
 
           <button
@@ -1992,6 +2283,26 @@ export const CanvasPane = () => {
               ))}
             </div>
 
+            {(activeTool === 'text') && (
+              <>
+                <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">Font</label>
+                <div className="grid grid-cols-4 gap-1">
+                  {FONT_OPTIONS.map((font) => (
+                    <button
+                      key={font.id}
+                      type="button"
+                      className={`rounded-[8px] border px-1.5 py-1 text-[0.62rem] font-semibold transition duration-150 ${textFont === font.family ? 'border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_12px_rgba(13,91,215,.18)]' : 'border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:bg-[rgba(26,26,26,.05)]'}`}
+                      onClick={() => setTextFont(font.family)}
+                      style={{ fontFamily: font.family }}
+                      title={font.label}
+                    >
+                      {font.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             {(uploadingImage || imageStatus) && (
               <div className="rounded-md border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.86)] px-2 py-1 text-[0.68rem] text-[var(--ink-soft)]">
                 {uploadingImage ? 'Uploading image...' : imageStatus}
@@ -2026,13 +2337,14 @@ export const CanvasPane = () => {
               onChange={(e) => setEditingObject((prev) => (prev ? { ...prev, value: e.target.value } : prev))}
               onBlur={commitObjectEdit}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                // Enter = new line, Shift+Enter = commit
+                if (e.key === 'Enter' && e.shiftKey) {
                   e.preventDefault();
                   commitObjectEdit();
                 }
                 if (e.key === 'Escape') {
                   e.preventDefault();
-                  setEditingObject(null);
+                  commitObjectEdit();
                 }
               }}
               className="min-w-[180px] resize-none rounded-md border border-[rgba(13,91,215,.45)] bg-[rgba(255,250,241,.95)] px-2 py-1 text-[14px] leading-[1.3] outline-none"

@@ -11,6 +11,7 @@ export class RedisPubSub {
   private serverId: string;
   private pub!: Redis;
   private sub!: Redis;
+  private healthy = false;
   private static CHANNEL = "ws-events";
 
   constructor(serverId: string) {
@@ -24,22 +25,36 @@ export class RedisPubSub {
       throw new Error("REDIS_URL is not defined");
     }
 
-    this.pub = new Redis(redisUrl);
-    this.sub = new Redis(redisUrl);
+    const retryStrategy = (times: number) => Math.min(times * 200, 5000)
+
+    this.pub = new Redis(redisUrl, { retryStrategy });
+    this.sub = new Redis(redisUrl, { retryStrategy });
 
     this.pub.on("connect", () => {
       console.log("[RedisPubSub] Publisher connected");
+      this.healthy = true
     });
 
     this.sub.on("connect", () => {
       console.log("[RedisPubSub] Subscriber connected");
+      this.healthy = true
+    });
+
+    this.pub.on("error", (err) => {
+      this.healthy = false
+      console.error("[RedisPubSub] Publisher error", err);
     });
 
     this.sub.on("error", (err) => {
+      this.healthy = false
       console.error("[RedisPubSub] Subscriber error", err);
     });
 
     await this.sub.subscribe(RedisPubSub.CHANNEL);
+  }
+
+  isHealthy() {
+    return this.healthy
   }
 
   async publish(event: Omit<WSRedisEvent, "origin">) {
@@ -60,6 +75,26 @@ export class RedisPubSub {
         event: fullEvent,
       });
     }
+  }
+
+  async tryAcquireLock(key: string, value: string, ttlMs: number): Promise<boolean> {
+    if (!this.pub) {
+      throw new Error("RedisPubSub not connected. Call connect() first.")
+    }
+
+    const result = await this.pub.set(key, value, "PX", ttlMs, "NX")
+    return result === "OK"
+  }
+
+  async releaseLock(key: string, value: string): Promise<boolean> {
+    if (!this.pub) {
+      throw new Error("RedisPubSub not connected. Call connect() first.")
+    }
+
+    const script =
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+    const deleted = await this.pub.eval(script, 1, key, value)
+    return deleted === 1
   }
 
   subscribe(handler: (event: WSRedisEvent) => void) {

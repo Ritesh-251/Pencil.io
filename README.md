@@ -1,4 +1,27 @@
-# Turborepo starter
+# MyPencil.io
+
+## Stage 6 media env
+
+Set these before using the new video/audio room flow:
+
+```sh
+LIVEKIT_URL=wss://your-livekit-host
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+LIVEKIT_TOKEN_TTL=2h
+```
+
+`http-backend` now mints LiveKit room tokens only after checking the authenticated user is a room member. The `web` app uses those short-lived tokens to join the room media session.
+
+For local development, the new `livekit` service in [`docker-compose.yml`](/Users/riteshhooda/Desktop/Pencil.io/docker-compose.yml) runs LiveKit in dev mode, so the matching backend values are:
+
+```sh
+LIVEKIT_URL=ws://localhost:7880
+LIVEKIT_API_KEY=devkey
+LIVEKIT_API_SECRET=secret
+```
+
+LiveKit's official local mode binds its signal server to `127.0.0.1:7880` by default, so the compose file explicitly binds it to `0.0.0.0` for host access.
 
 This Turborepo starter is maintained by the Turborepo core team.
 

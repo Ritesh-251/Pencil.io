@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
 import {
   ConnectionState,
   ParticipantEvent,
@@ -557,7 +557,9 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
   const [pinnedIdentity, setPinnedIdentity]         = useState<string | null>(null);
   const [spotlightSharerIdentity, setSpotlightSharerIdentity] = useState<string | null>(null);
   const [isPiP, setIsPiP]                           = useState(false);
-  const [pipPortalRoot, setPipPortalRoot]            = useState<Element | null>(null);
+  // createPortal() does NOT work cross-document. createRoot() is the correct API.
+  const pipRootRef                                   = useRef<Root | null>(null);
+  const [pipIsOpen, setPipIsOpen]                    = useState(false);
   const [pipViewIndex, setPipViewIndex]              = useState(0);
   const [pipPinnedKey, setPipPinnedKey]              = useState<string | null>(null);
 
@@ -799,33 +801,28 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
     const docPiP = (window as any).documentPictureInPicture;
     if (docPiP) {
       try {
-        if (pipPortalRoot) {
-          // Close existing
-          (docPiP as any).window?.close();
-          setPipPortalRoot(null);
-          setIsPiP(false);
+        if (pipIsOpen) {
+          docPiP.window?.close(); // pagehide listener cleans up state
           return;
         }
         const pipWin: Window = await docPiP.requestWindow({ width: 420, height: 300 });
-        // Copy all stylesheets so our CSS works inside
-        [...document.styleSheets].forEach((sheet) => {
-          try {
-            if (sheet.href) {
-              const link = pipWin.document.createElement('link');
-              link.rel = 'stylesheet'; link.href = sheet.href;
-              pipWin.document.head.appendChild(link);
-            } else {
-              const style = pipWin.document.createElement('style');
-              style.textContent = [...sheet.cssRules].map((r) => r.cssText).join('\n');
-              pipWin.document.head.appendChild(style);
-            }
-          } catch { /* cross-origin sheet — skip */ }
+        // Next.js inlines CSS via <style> tags — clone them into the PiP document
+        [...document.querySelectorAll('style, link[rel=stylesheet]')].forEach((el) => {
+          pipWin.document.head.appendChild(el.cloneNode(true));
         });
-        // Inject base background
-        pipWin.document.body.style.cssText = 'margin:0;background:#1a1a1a;overflow:hidden';
-        setPipPortalRoot(pipWin.document.body);
+        pipWin.document.documentElement.style.cssText = 'height:100%';
+        pipWin.document.body.style.cssText = 'margin:0;height:100%;background:#141414;overflow:hidden';
+        // Create a React root in the PiP window — this is the correct cross-document pattern
+        const pipRoot = createRoot(pipWin.document.body);
+        pipRootRef.current = pipRoot;
+        setPipIsOpen(true);
         setIsPiP(true);
-        pipWin.addEventListener('pagehide', () => { setPipPortalRoot(null); setIsPiP(false); });
+        pipWin.addEventListener('pagehide', () => {
+          pipRootRef.current?.unmount();
+          pipRootRef.current = null;
+          setPipIsOpen(false);
+          setIsPiP(false);
+        });
         return;
       } catch { /* fall through to video PiP */ }
     }
@@ -841,6 +838,27 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
       }
     } catch { /* PiP not supported */ }
   };
+
+  // Sync PiP content whenever relevant state changes.
+  // root.render() is imperative here because the PiP window is a separate
+  // browsing context — React portals (createPortal) only work same-document.
+  useEffect(() => {
+    if (!pipRootRef.current || !pipIsOpen) return;
+    pipRootRef.current.render(
+      <PipCarouselContent
+        screenTiles={screenTiles}
+        cameraTiles={cameraTiles}
+        activeSpeakers={activeSpeakers}
+        raisedHands={raisedHands}
+        reactions={reactions}
+        pipViewIndex={pipViewIndex}
+        setPipViewIndex={setPipViewIndex}
+        pipPinnedKey={pipPinnedKey}
+        setPipPinnedKey={setPipPinnedKey}
+      />
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipIsOpen, screenTiles, cameraTiles, activeSpeakers, raisedHands, reactions, pipViewIndex, pipPinnedKey]);
 
   // Auto-rejoin
   useEffect(() => {
@@ -1134,148 +1152,119 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
         )}
       </div>
 
-      {/* ── Document PiP portal — full-window carousel, all views navigable ── */}
-      {pipPortalRoot && (() => {
-        // Build ordered view list: screenshares first, then cameras
-        type PipView = { kind: 'screen' | 'camera'; tile: TileParticipant; key: string };
-        const allViews: PipView[] = [
-          ...screenTiles.map((t) => ({ kind: 'screen' as const, tile: t, key: `screen:${t.identity}` })),
-          ...cameraTiles.map((t) => ({ kind: 'camera' as const, tile: t, key: `camera:${t.identity}` })),
-        ];
-
-        // Pinned view always moves to index 0
-        const sortedViews = pipPinnedKey
-          ? [
-              ...allViews.filter((v) => v.key === pipPinnedKey),
-              ...allViews.filter((v) => v.key !== pipPinnedKey),
-            ]
-          : allViews;
-
-        const safeIdx     = Math.min(pipViewIndex, Math.max(0, sortedViews.length - 1));
-        const currentView = sortedViews[safeIdx] ?? null;
-        const total       = sortedViews.length;
-        const isPinned    = currentView !== null && currentView.key === pipPinnedKey;
-
-        const pipTogglePin = (key: string) => {
-          setPipPinnedKey((prev) => {
-            if (prev === key) return null;
-            setPipViewIndex(0); // pinned always becomes slide 0
-            return key;
-          });
-        };
-
-        const arrowBtnStyle = (enabled: boolean): React.CSSProperties => ({
-          position: 'absolute', top: '50%', transform: 'translateY(-50%)',
-          width: 28, height: 44, border: 'none', borderRadius: 8,
-          cursor: enabled ? 'pointer' : 'default',
-          background: enabled ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.04)',
-          color: enabled ? 'white' : 'rgba(255,255,255,.15)',
-          fontSize: '1rem', fontWeight: 700,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backdropFilter: 'blur(4px)', zIndex: 20,
-          transition: 'background 140ms',
-        });
-
-        return createPortal(
-          <div style={{ position: 'relative', width: '100%', height: '100%', background: '#141414', overflow: 'hidden' }}>
-
-            {/* Current view — fills entire PiP window */}
-            <div style={{ position: 'absolute', inset: 0 }}>
-              {currentView?.kind === 'screen' ? (
-                <PipScreenShareTile key={currentView.key} participant={currentView.tile.participant} identity={currentView.tile.identity} isLocal={currentView.tile.isLocal} />
-              ) : currentView?.kind === 'camera' ? (
-                <PipTileInner key={currentView.key}
-                  participant={currentView.tile.participant} identity={currentView.tile.identity} isLocal={currentView.tile.isLocal}
-                  isSpeaking={activeSpeakers.includes(currentView.tile.identity)}
-                  isHandRaised={raisedHands.has(currentView.tile.identity)}
-                  reactions={reactionsFor(currentView.tile.identity)}
-                />
-              ) : (
-                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.35)', fontSize: '0.82rem' }}>
-                  No participants yet
-                </div>
-              )}
-            </div>
-
-            {/* Top overlay: pin button + counter */}
-            <div style={{
-              position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20,
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '7px 9px',
-              background: 'linear-gradient(to bottom, rgba(0,0,0,.55), transparent)',
-              pointerEvents: 'none',
-            }}>
-              {/* Pin/Unpin button */}
-              {currentView && (
-                <button
-                  onClick={() => pipTogglePin(currentView.key)}
-                  style={{
-                    pointerEvents: 'all', border: 'none', borderRadius: 999,
-                    padding: '3px 9px', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer',
-                    background: isPinned ? 'rgba(13,91,215,.85)' : 'rgba(255,255,255,.18)',
-                    color: 'white', backdropFilter: 'blur(4px)',
-                    display: 'flex', alignItems: 'center', gap: 4,
-                  }}
-                >
-                  {isPinned ? '📌 Unpin' : 'Pin'}
-                </button>
-              )}
-              {/* Slide counter */}
-              {total > 1 && (
-                <span style={{ pointerEvents: 'none', color: 'rgba(255,255,255,.7)', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(0,0,0,.35)', borderRadius: 999, padding: '2px 8px' }}>
-                  {safeIdx + 1} / {total}
-                </span>
-              )}
-            </div>
-
-            {/* Left arrow */}
-            {total > 1 && (
-              <button
-                onClick={() => setPipViewIndex((i) => Math.max(0, i - 1))}
-                disabled={safeIdx === 0}
-                style={{ ...arrowBtnStyle(safeIdx > 0), left: 5 }}
-              >
-                ‹
-              </button>
-            )}
-
-            {/* Right arrow */}
-            {total > 1 && (
-              <button
-                onClick={() => setPipViewIndex((i) => Math.min(total - 1, i + 1))}
-                disabled={safeIdx === total - 1}
-                style={{ ...arrowBtnStyle(safeIdx < total - 1), right: 5 }}
-              >
-                ›
-              </button>
-            )}
-
-            {/* Dot indicators at bottom */}
-            {total > 1 && (
-              <div style={{
-                position: 'absolute', bottom: 7, left: 0, right: 0,
-                display: 'flex', justifyContent: 'center', gap: 4, zIndex: 20,
-              }}>
-                {sortedViews.map((v, i) => (
-                  <button
-                    key={v.key}
-                    onClick={() => setPipViewIndex(i)}
-                    style={{
-                      width: i === safeIdx ? 16 : 6, height: 6, border: 'none',
-                      borderRadius: 999, cursor: 'pointer',
-                      background: i === safeIdx ? 'white' : 'rgba(255,255,255,.35)',
-                      transition: 'width 200ms, background 200ms',
-                      padding: 0,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-          </div>,
-          pipPortalRoot,
-        );
-      })()}
+      {/* PiP content rendered by pipRootRef.current.render() in sync useEffect */}
     </section>
+  );
+}
+
+// ─── PiP Carousel Content ─────────────────────────────────────────────────────
+// Rendered inside the Document PiP window by createRoot().render().
+// Must be a real React component — works in a different browsing context.
+
+function PipCarouselContent({
+  screenTiles, cameraTiles, activeSpeakers, raisedHands, reactions,
+  pipViewIndex, setPipViewIndex, pipPinnedKey, setPipPinnedKey,
+}: {
+  screenTiles: TileParticipant[];
+  cameraTiles: TileParticipant[];
+  activeSpeakers: string[];
+  raisedHands: Set<string>;
+  reactions: ReactionEvent[];
+  pipViewIndex: number;
+  setPipViewIndex: React.Dispatch<React.SetStateAction<number>>;
+  pipPinnedKey: string | null;
+  setPipPinnedKey: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
+  type PipView = { kind: 'screen' | 'camera'; tile: TileParticipant; key: string };
+
+  const allViews: PipView[] = [
+    ...screenTiles.map((t) => ({ kind: 'screen' as const, tile: t, key: `screen:${t.identity}` })),
+    ...cameraTiles.map((t) => ({ kind: 'camera' as const, tile: t, key: `camera:${t.identity}` })),
+  ];
+
+  const sortedViews = pipPinnedKey
+    ? [...allViews.filter((v) => v.key === pipPinnedKey), ...allViews.filter((v) => v.key !== pipPinnedKey)]
+    : allViews;
+
+  const total       = sortedViews.length;
+  const safeIdx     = Math.min(pipViewIndex, Math.max(0, total - 1));
+  const currentView = sortedViews[safeIdx] ?? null;
+  const isPinned    = currentView !== null && currentView.key === pipPinnedKey;
+
+  const reactionList = (id: string) => reactions.filter((r) => r.identity === id);
+
+  const onTogglePin = (key: string) =>
+    setPipPinnedKey((prev) => { if (prev === key) return null; setPipViewIndex(0); return key; });
+
+  const arrowSty = (enabled: boolean, side: 'left' | 'right'): React.CSSProperties => ({
+    position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+    [side]: 5, width: 28, height: 44, border: 'none', borderRadius: 8,
+    cursor: enabled ? 'pointer' : 'default',
+    background: enabled ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.04)',
+    color: enabled ? 'white' : 'rgba(255,255,255,.1)',
+    fontSize: '1rem', fontWeight: 700,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    backdropFilter: 'blur(4px)', zIndex: 20,
+  });
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#141414', overflow: 'hidden' }}>
+      {/* Current view fills the entire window */}
+      <div style={{ position: 'absolute', inset: 0 }}>
+        {currentView?.kind === 'screen' ? (
+          <PipScreenShareTile key={currentView.key} participant={currentView.tile.participant} identity={currentView.tile.identity} isLocal={currentView.tile.isLocal} />
+        ) : currentView?.kind === 'camera' ? (
+          <PipTileInner key={currentView.key}
+            participant={currentView.tile.participant}
+            identity={currentView.tile.identity}
+            isLocal={currentView.tile.isLocal}
+            isSpeaking={activeSpeakers.includes(currentView.tile.identity)}
+            isHandRaised={raisedHands.has(currentView.tile.identity)}
+            reactions={reactionList(currentView.tile.identity)}
+          />
+        ) : (
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.3)', fontSize: '0.82rem' }}>
+            No participants yet
+          </div>
+        )}
+      </div>
+
+      {/* Top bar: pin button + slide counter */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 9px', background: 'linear-gradient(to bottom,rgba(0,0,0,.55),transparent)', pointerEvents: 'none' }}>
+        {currentView && (
+          <button
+            onClick={() => onTogglePin(currentView.key)}
+            style={{ pointerEvents: 'all', border: 'none', borderRadius: 999, padding: '3px 9px', fontSize: '0.62rem', fontWeight: 700, cursor: 'pointer', background: isPinned ? 'rgba(13,91,215,.85)' : 'rgba(255,255,255,.18)', color: 'white', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            {isPinned ? '📌 Unpin' : 'Pin'}
+          </button>
+        )}
+        {total > 1 && (
+          <span style={{ color: 'rgba(255,255,255,.75)', fontSize: '0.62rem', fontWeight: 600, background: 'rgba(0,0,0,.35)', borderRadius: 999, padding: '2px 8px', pointerEvents: 'none' }}>
+            {safeIdx + 1} / {total}
+          </span>
+        )}
+      </div>
+
+      {/* Nav arrows */}
+      {total > 1 && (
+        <button onClick={() => setPipViewIndex((i) => Math.max(0, i - 1))} disabled={safeIdx === 0} style={arrowSty(safeIdx > 0, 'left')}>&#8249;</button>
+      )}
+      {total > 1 && (
+        <button onClick={() => setPipViewIndex((i) => Math.min(total - 1, i + 1))} disabled={safeIdx >= total - 1} style={arrowSty(safeIdx < total - 1, 'right')}>&#8250;</button>
+      )}
+
+      {/* Dot indicators */}
+      {total > 1 && (
+        <div style={{ position: 'absolute', bottom: 7, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4, zIndex: 20 }}>
+          {sortedViews.map((v, i) => (
+            <button key={v.key} onClick={() => setPipViewIndex(i)}
+              style={{ width: i === safeIdx ? 16 : 6, height: 6, border: 'none', borderRadius: 999, background: i === safeIdx ? 'white' : 'rgba(255,255,255,.35)', cursor: 'pointer', padding: 0, transition: 'width 200ms' }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

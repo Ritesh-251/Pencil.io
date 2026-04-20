@@ -1112,6 +1112,11 @@ export const CanvasPane = () => {
     };
   };
 
+  // Keep a stable ref to the latest draw-all function.
+  // The ResizeObserver is set up once (empty deps) so it can't close over the latest
+  // drawableObjects/view – using a ref lets it always redraw the current frame.
+  const drawAllRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current;
@@ -1121,8 +1126,12 @@ export const CanvasPane = () => {
       const rect = container.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
       dprRef.current = dpr;
-      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      // Setting canvas.width/height clears the pixel buffer (HTML Canvas spec).
+      // We resize first, then immediately trigger a redraw via drawAllRef so
+      // content is never blank after a layout change (e.g. panel toggle).
+      canvas.width  = Math.max(1, Math.floor(rect.width  * dpr));
       canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      drawAllRef.current?.();
     };
 
     resize();
@@ -1195,8 +1204,26 @@ export const CanvasPane = () => {
     if (!ctx) return;
 
     const dpr = dprRef.current;
-    const cssWidth = ctx.canvas.width / dpr;
+    const cssWidth  = ctx.canvas.width  / dpr;
     const cssHeight = ctx.canvas.height / dpr;
+
+    // Full render pass — also stored in drawAllRef so the ResizeObserver
+    // can call it immediately after canvas.width/height is set.
+    const drawAll = () => {
+      const dprNow = dprRef.current;
+      const cw = ctx.canvas.width  / dprNow;
+      const ch = ctx.canvas.height / dprNow;
+      ctx.setTransform(dprNow, 0, 0, dprNow, 0, 0);
+      ctx.clearRect(0, 0, cw, ch);
+      ctx.setTransform(
+        dprNow * view.scale, 0, 0,
+        dprNow * view.scale,
+        dprNow * view.offsetX,
+        dprNow * view.offsetY,
+      );
+      drawableObjects.forEach((obj: any) => drawObject(ctx, obj));
+    };
+    drawAllRef.current = drawAll;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
@@ -1211,6 +1238,7 @@ export const CanvasPane = () => {
     );
 
     drawableObjects.forEach((obj: any) => drawObject(ctx, obj));
+
 
     if (textDraft) {
       drawObject(ctx, {

@@ -21,7 +21,6 @@ export function createChatMessageEvent({
     roomId,
     userId,
     timestamp: Date.now(),
-    version: 1,
     payload: {
       messageId: crypto.randomUUID(),
       content,

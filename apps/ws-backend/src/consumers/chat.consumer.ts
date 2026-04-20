@@ -1,6 +1,8 @@
 import { getChannel } from "../infra/rabbitmq"
 import { prisma } from "@repo/db"
 import { Prisma } from "@repo/db"
+import { logEvent, logger } from "../infra/logger"
+import { recordError, recordErrorDetail } from "../monitor/metrics"
 
 export async function startChatConsumer() {
   const channel = getChannel()
@@ -8,6 +10,7 @@ export async function startChatConsumer() {
   await channel.consume("chat.queue", async (msg) => {
     if (!msg) return
 
+    const startedAt = Date.now()
     const event = JSON.parse(msg.content.toString())
 
     if (event.type !== "chat.message") return
@@ -24,14 +27,29 @@ export async function startChatConsumer() {
       })
 
       channel.ack(msg)
+      logEvent("consume", event, { durationMs: Date.now() - startedAt })
     } catch (err) {
       
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-        console.log("[ChatConsumer] Duplicate message, already persisted — acking")
+        logger.info({ eventId: event.id, roomId: event.roomId }, "Chat dedup: message already persisted")
         channel.ack(msg)
         return
       }
-      console.error("Chat consumer error", err)
+      recordError()
+      recordErrorDetail({
+        stage: "consume",
+        type: event.type,
+        message: err instanceof Error ? err.message : "Chat consumer error",
+      })
+      logger.error({
+        stage: "consume",
+        eventId: event.id,
+        roomId: event.roomId,
+        userId: event.userId,
+        type: event.type,
+        durationMs: Date.now() - startedAt,
+        err,
+      }, "Chat consumer error")
       
     }
   })

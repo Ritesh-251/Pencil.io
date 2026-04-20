@@ -1,5 +1,6 @@
 import { AuthenticatedSocket } from "../types/socket";
 import { SocketEvent } from "../types/event";
+import { logger } from "../infra/logger";
 
 export class RoomManager {
   private roomSockets: Map<string, Set<AuthenticatedSocket>> = new Map();
@@ -19,7 +20,7 @@ export class RoomManager {
       this.socketRooms.set(socket.id, rooms);
     }
     rooms.add(roomId);
-    console.log(`Socket ${socket.userId} joined room ${roomId}`);
+    logger.info({ roomId, userId: socket.userId, socketId: socket.id }, "Socket joined room")
   }
   leaveRoom(roomId: string, socket: AuthenticatedSocket) {
     const sockets = this.roomSockets.get(roomId);
@@ -38,15 +39,31 @@ export class RoomManager {
         this.socketRooms.delete(socket.id);
       }
     }
-    console.log(`Socket ${socket.userId} left room ${roomId}`);
+    logger.info({ roomId, userId: socket.userId, socketId: socket.id }, "Socket left room")
   }
   broadCast(roomId: string, event: SocketEvent) {
     const sockets = this.roomSockets.get(roomId);
     if (!sockets) return;
-    const message = JSON.stringify(event);
+    const message = JSON.stringify({
+      ...event,
+      event: event.type,
+    });
     for (const socket of sockets) {
-      if (socket.readyState === socket.OPEN) {
+      if (socket.readyState !== socket.OPEN) {
+        this.removeSocket(socket)
+        continue
+      }
+
+      try {
         socket.send(message);
+      } catch (error) {
+        logger.error({
+          roomId,
+          socketId: socket.id,
+          userId: socket.userId,
+          error,
+        }, "Broadcast send failed")
+        this.removeSocket(socket)
       }
     }
   }
@@ -56,10 +73,15 @@ export class RoomManager {
     for (const roomId of rooms) {
       this.leaveRoom(roomId, socket);
     }
-    console.log(`Socket ${socket.userId} removed from all rooms`);
+    logger.info({ userId: socket.userId, socketId: socket.id }, "Socket removed from all rooms")
   }
   getRooms(socket: AuthenticatedSocket): Set<string> | undefined {
     return this.socketRooms.get(socket.id);
+  }
+
+  isSocketInRoom(socket: AuthenticatedSocket, roomId: string): boolean {
+    const rooms = this.socketRooms.get(socket.id)
+    return !!rooms && rooms.has(roomId)
   }
 }
 export const roomManager = new RoomManager();

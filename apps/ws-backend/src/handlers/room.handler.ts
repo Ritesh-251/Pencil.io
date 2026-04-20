@@ -1,14 +1,8 @@
 import { prisma } from "@repo/db";
 import { AuthenticatedSocket } from "../types/socket";
 import { roomManager } from "../manager/roomManager";
-function sendError(socket: AuthenticatedSocket, message: string) {
-  socket.send(
-    JSON.stringify({
-      type: "error",
-      payload: { message },
-    }),
-  );
-}
+import { logger } from "../infra/logger";
+import { sendSocketError } from "../utils/socket.util";
 
 export const handleRoomJoin = async function (
   socket: AuthenticatedSocket,
@@ -16,12 +10,7 @@ export const handleRoomJoin = async function (
 ) {
   const { roomId } = payload;
   if (!roomId) {
-    socket.send(
-      JSON.stringify({
-        type: "error",
-        payload: { message: "roomId is required" },
-      }),
-    );
+    sendSocketError(socket, "roomId is required")
     return;
   }
   try {
@@ -34,12 +23,7 @@ export const handleRoomJoin = async function (
       },
     });
     if (!membership) {
-      socket.send(
-        JSON.stringify({
-          type: "error",
-          payload: { message: "Not a member of this room" },
-        }),
-      );
+      sendSocketError(socket, "Not a member of this room")
       return;
     }
     roomManager.joinRoom(roomId, socket);
@@ -57,8 +41,8 @@ export const handleRoomJoin = async function (
       },
     });
   } catch (error) {
-    console.error("Chat history error:", error);
-    sendError(socket, "Internal server error");
+    logger.error({ err: error, userId: socket.userId, roomId }, "Room join error")
+    sendSocketError(socket, "Internal server error");
   }
 };
 export const handleRoomLeave = async (
@@ -67,14 +51,7 @@ export const handleRoomLeave = async (
 ) => {
   const { roomId } = payload;
   if (!roomId) {
-    socket.send(
-      JSON.stringify({
-        type: "error",
-        payload: {
-          message: "roomId is required",
-        },
-      }),
-    );
+    sendSocketError(socket, "roomId is required")
     return;
   }
   roomManager.leaveRoom(roomId, socket);

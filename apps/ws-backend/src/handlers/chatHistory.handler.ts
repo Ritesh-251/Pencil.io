@@ -1,25 +1,18 @@
 import { AuthenticatedSocket } from "../types/socket";
 import { prisma } from "@repo/db";
-
-function sendError(socket: AuthenticatedSocket, message: string) {
-  socket.send(
-    JSON.stringify({
-      type: "error",
-      payload: { message },
-    }),
-  );
-}
+import { logger } from "../infra/logger";
+import { sendSocketError } from "../utils/socket.util";
 
 export const handleChatHistory = async function (
   socket: AuthenticatedSocket,
   payload: any,
 ) {
   if (!payload || typeof payload !== "object") {
-    return sendError(socket, "Invalid payload");
+    return sendSocketError(socket, "Invalid payload");
   }
   const { roomId } = payload;
   if (!roomId) {
-    return sendError(socket, "roomId is required");
+    return sendSocketError(socket, "roomId is required");
   }
 
   try {
@@ -33,7 +26,7 @@ export const handleChatHistory = async function (
     });
 
     if (!membership) {
-      return sendError(socket, "Not a member of this room");
+      return sendSocketError(socket, "Not a member of this room");
     }
     const messages = await prisma.message.findMany({
       where: { roomId },
@@ -50,7 +43,7 @@ export const handleChatHistory = async function (
       }),
     );
   } catch (error) {
-    console.error("Chat history error:", error);
-    sendError(socket, "Internal server error");
+    logger.error({ err: error, userId: socket.userId, roomId }, "Chat history error")
+    sendSocketError(socket, "Internal server error");
   }
 };

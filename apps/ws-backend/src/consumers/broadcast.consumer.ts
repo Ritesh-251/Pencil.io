@@ -1,6 +1,8 @@
 import { getChannel } from "../infra/rabbitmq"
 import { roomManager } from "../manager/roomManager"
-import { pubsub } from "../infra/redis"
+import { safePublish } from "../infra/redis"
+import { logEvent, logger } from "../infra/logger"
+import { recordError, recordErrorDetail } from "../monitor/metrics"
 
 export async function startBroadcastConsumer() {
   const channel = getChannel()
@@ -8,6 +10,7 @@ export async function startBroadcastConsumer() {
   await channel.consume("broadcast.queue", async (msg) => {
     if (!msg) return
 
+    const startedAt = Date.now()
     const event = JSON.parse(msg.content.toString())
 
     if (event.type !== "chat.message") return
@@ -27,15 +30,30 @@ export async function startBroadcastConsumer() {
       roomManager.broadCast(event.roomId, outgoing)
 
       // cross-server
-      await pubsub.publish({
+      await safePublish({
         type: "chat:new",
         roomId: event.roomId,
         payload: outgoing,
       })
 
       channel.ack(msg)
+      logEvent("broadcast", event, { durationMs: Date.now() - startedAt })
     } catch (err) {
-      console.error("Broadcast consumer error", err)
+      recordError()
+      recordErrorDetail({
+        stage: "broadcast",
+        type: event.type,
+        message: err instanceof Error ? err.message : "Broadcast consumer error",
+      })
+      logger.error({
+        stage: "broadcast",
+        eventId: event.id,
+        roomId: event.roomId,
+        userId: event.userId,
+        type: event.type,
+        durationMs: Date.now() - startedAt,
+        err,
+      }, "Broadcast consumer error")
     }
   })
 }

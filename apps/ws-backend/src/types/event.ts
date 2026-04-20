@@ -8,6 +8,5 @@ export type Event<T = any> = {
   roomId: string
   userId: string
   timestamp: number
-  version: number
   payload: T
 }

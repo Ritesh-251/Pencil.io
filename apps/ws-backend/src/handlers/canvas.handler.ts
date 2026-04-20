@@ -1,11 +1,10 @@
 import { AuthenticatedSocket } from "../types/socket"
 import { createCanvasObjectEvent } from "../events/canvas/canvas.event"
 import { canvasService } from "../services/canvas.service"
-import { eventPublisher } from "../infra/eventPublisher"
-
-function sendError(socket: AuthenticatedSocket, message: string) {
-  socket.send(JSON.stringify({ type: "error", payload: { message } }))
-}
+import { BackpressureError, eventPublisher } from "../infra/eventPublisher"
+import { logger } from "../infra/logger"
+import { sendSocketCodedError, sendSocketError } from "../utils/socket.util"
+import { assertRoomMember, isRoomAccessDeniedError } from "../services/roomAccess.service"
 
 export async function handleCanvasObject(
   socket: AuthenticatedSocket,
@@ -16,8 +15,11 @@ export async function handleCanvasObject(
   const { roomId, objectId, action, data } = payload
 
   if (!roomId || !objectId || !action) {
-    return sendError(socket, "Invalid payload")
+    return sendSocketError(socket, "Invalid payload")
   }
+
+  const validationError = canvasService.validateObject(action, data)
+  if (validationError) return sendSocketError(socket, validationError)
 
   const event = createCanvasObjectEvent({
     roomId,
@@ -27,14 +29,28 @@ export async function handleCanvasObject(
     data,
   })
 
-
-  const validationError = canvasService.validateStroke(event)
-  if (validationError) return sendError(socket, validationError)
-
   try {
+    await assertRoomMember(socket.userId!, roomId)
     await eventPublisher.publish(event)
   } catch (err) {
-    console.error("Canvas publish error:", err)
-    sendError(socket, "Internal server error")
+    if (isRoomAccessDeniedError(err)) {
+      return sendSocketError(socket, "Not a member of this room")
+    }
+
+    logger.error({ err, roomId, userId: socket.userId, objectId }, "Canvas publish error")
+
+    if (err instanceof BackpressureError) {
+      return sendSocketCodedError(
+        socket,
+        "BACKPRESSURE",
+        "System overloaded. Try again shortly.",
+        {
+          retryAfterMs: 1000,
+          strategy: "retry-with-backoff-and-local-buffer",
+        },
+      )
+    }
+
+    sendSocketError(socket, "Internal server error")
   }
 }

@@ -6,10 +6,29 @@ import { EventRouter } from "./router/eventRouter";
 import { roomManager } from "./manager/roomManager";
 import { randomUUID } from "crypto";
 import { URL } from "url";
-import { pubsub } from "./infra/redis";
+import { safePublish } from "./infra/redis";
+import { isOverloaded } from "./monitor/systemLoad";
+import { logger } from "./infra/logger";
+import { recordBackpressureTrigger, recordError, recordIngress } from "./monitor/metrics";
+import { sendSocketCodedError, sendSocketError } from "./utils/socket.util";
+
+type RateEntry = {
+  count: number
+  start: number
+}
+
+const RATE_LIMIT_PER_SEC = Number(process.env.WS_RATE_LIMIT_PER_SEC || 300)
+const RATE_WINDOW_MS = 1000
+const WRITE_EVENTS = new Set([
+  "chat:send",
+  "canvas:draw",
+  "canvas:undo",
+  "canvas:redo",
+])
 
 export class SocketManager {
   private router = new EventRouter();
+  private rateMap: Map<string, RateEntry> = new Map();
 
   handleConnection(socket: WebSocket, request: IncomingMessage) {
     const ws = socket as AuthenticatedSocket;
@@ -19,26 +38,31 @@ export class SocketManager {
       ws.userId = userId;
       ws.id = randomUUID();
 
-      console.log("Socket connected:", {
+      logger.info({
         userId: ws.userId,
         socketId: ws.id,
-      });
+      }, "Socket connected")
 
       ws.on("message", (data) => {
         this.handleMessage(ws, data.toString()).catch((err) => {
-          console.error("Message handling error:", err);
+          recordError()
+          logger.error({ err, userId: ws.userId, socketId: ws.id }, "Message handling error");
         });
       });
 
       ws.on("close", () => {
-        this.handleDisconnect(ws);
+        void this.handleDisconnect(ws).catch((err) => {
+          recordError();
+          logger.error({ err, userId: ws.userId, socketId: ws.id }, "Socket disconnect handling error");
+        });
       });
       ws.on("error", (err) => {
-        console.error("Socket error:", err);
+        logger.error({ err, userId: ws.userId, socketId: ws.id }, "Socket error")
       });
     } catch (err) {
-      console.log("Socket authentication failed");
-      ws.close();
+      recordError()
+      logger.warn({ err }, "Socket authentication failed");
+      ws.close(4401, "Unauthorized");
     }
   }
   private authenticate(req: IncomingMessage) {
@@ -63,16 +87,64 @@ export class SocketManager {
     }
     try {
       const parsed = JSON.parse(raw);
+      const type = typeof parsed?.type === "string"
+        ? parsed.type
+        : (typeof parsed?.event === "string" ? parsed.event : undefined)
 
-      await this.router.route(socket, parsed);
+      if (!type) {
+        throw new Error("Invalid message format")
+      }
+
+      const normalizedEvent = {
+        type,
+        payload: parsed?.payload,
+      }
+
+      recordIngress()
+
+      this.checkRateLimit(socket.userId!)
+
+      if (isOverloaded() && WRITE_EVENTS.has(normalizedEvent.type)) {
+        recordBackpressureTrigger()
+        sendSocketCodedError(
+          socket,
+          "BACKPRESSURE",
+          "System overloaded. Reads are still available.",
+        )
+        return
+      }
+
+      await this.router.route(socket, normalizedEvent);
     } catch (error) {
-      console.log("Invalid socket message from:", socket.userId);
-      socket.send(
-        JSON.stringify({
-          type: "error",
-          payload: { message: "Invalid message format" },
-        }),
-      );
+      recordError()
+
+      const message = error instanceof Error ? error.message : "Invalid message format"
+      const isRateLimit = message.includes("Rate limit")
+
+      if (isRateLimit) {
+        sendSocketCodedError(socket, "RATE_LIMIT", "Rate limit exceeded")
+      } else {
+        sendSocketError(socket, "Invalid message format")
+      }
+
+      logger.warn({ userId: socket.userId, error: message }, "Socket message rejected")
+    }
+  }
+
+  private checkRateLimit(userId: string) {
+    const now = Date.now()
+    const current = this.rateMap.get(userId) || { count: 0, start: now }
+
+    if (now - current.start > RATE_WINDOW_MS) {
+      current.start = now
+      current.count = 0
+    }
+
+    current.count += 1
+    this.rateMap.set(userId, current)
+
+    if (current.count > RATE_LIMIT_PER_SEC) {
+      throw new Error("Rate limit exceeded")
     }
   }
   private async handleDisconnect(socket: AuthenticatedSocket) {
@@ -85,19 +157,24 @@ export class SocketManager {
       },
     };
 
-    if (rooms) {
-      for (const roomId of rooms) {
-        roomManager.broadCast(roomId, eventPayload);
-        await pubsub.publish({
-          type: "presence:update",
-          roomId,
-          payload: eventPayload,
-        });
+    try {
+      if (rooms) {
+        for (const roomId of rooms) {
+          roomManager.broadCast(roomId, eventPayload);
+          await safePublish({
+            type: "presence:update",
+            roomId,
+            payload: eventPayload,
+          });
+        }
+      }
+    } finally {
+      roomManager.removeSocket(socket);
+      if (socket.userId) {
+        this.rateMap.delete(socket.userId)
       }
     }
 
-    roomManager.removeSocket(socket);
-
-    console.log("Socket disconnected:", socket.userId);
+    logger.info({ userId: socket.userId, socketId: socket.id }, "Socket disconnected")
   }
 }

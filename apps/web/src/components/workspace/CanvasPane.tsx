@@ -104,9 +104,11 @@ type HistoryEntry = {
 };
 
 const CANVAS_EMIT_INTERVAL_MS = 40;
+const GROUP_EMIT_INTERVAL_MS = 250; // slower throttle for group drag to avoid rate limiting
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 3;
 const ERASER_RADIUS = 14;
+const MIN_POINT_DISTANCE = 3; // px — minimum distance between consecutive stroke points
 const HANDLE_SIZE = 10;
 const TEXT_SIZE_OPTIONS = [16, 22, 30] as const;
 
@@ -127,15 +129,30 @@ const STROKE_STYLE_OPTIONS = [
 
 type StrokeStyle = 'sharp' | 'smooth' | 'fluid';
 
-function measureTextBounds(value: string, fontSize: number) {
+function measureTextBounds(value: string, fontSize: number, fontFamily?: string) {
+  // Use an offscreen canvas for accurate text measurement across all fonts
+  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+  const ctx = canvas?.getContext('2d');
   const lines = value.split(/\n/g);
-  const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
-  const width = Math.max(60, Math.round(longest * fontSize * 0.62));
+  const lineHeight = Math.round(fontSize * 1.24);
+
+  let maxWidth = 60;
+  if (ctx) {
+    ctx.font = `${fontSize}px ${fontFamily || '"Virgil", "Comic Sans MS", cursive'}`;
+    for (const line of lines) {
+      maxWidth = Math.max(maxWidth, Math.ceil(ctx.measureText(line).width));
+    }
+  } else {
+    // Fallback: character-based estimate
+    const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
+    maxWidth = Math.max(60, Math.round(longest * fontSize * 0.62));
+  }
+
   const height = Math.max(
     Math.round(fontSize * 1.4),
-    Math.round(lines.length * fontSize * 1.24 + 4),
+    Math.round(lines.length * lineHeight + 4),
   );
-  return { width, height };
+  return { width: maxWidth + 4, height };
 }
 
 function drawRoundedRect(
@@ -584,7 +601,8 @@ export const CanvasPane = () => {
     setTextDraft(null);
     if (!value.trim()) return;
 
-    const bounds = measureTextBounds(value, fontSize);
+    const draftFontFamily = textDraft.fontFamily || DEFAULT_FONT_FAMILY;
+    const bounds = measureTextBounds(value, fontSize, draftFontFamily);
 
     const objectId = `text-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const props = {
@@ -595,7 +613,7 @@ export const CanvasPane = () => {
       text: value,
       color: strokeColor,
       fontSize,
-      fontFamily: textDraft.fontFamily || DEFAULT_FONT_FAMILY,
+      fontFamily: draftFontFamily,
       width: bounds.width,
       height: bounds.height,
     };
@@ -618,9 +636,10 @@ export const CanvasPane = () => {
       editingObject.kind === 'text'
         ? (editingObject.fontSize ?? Number(object.fontSize || textSize))
         : Number(object.fontSize || textSize);
+    const editFontFamily = typeof object.fontFamily === 'string' ? object.fontFamily : DEFAULT_FONT_FAMILY;
     const bounds =
       editingObject.kind === 'text'
-        ? measureTextBounds(nextText, fontSize)
+        ? measureTextBounds(nextText, fontSize, editFontFamily)
         : { width: Number(object.width || 180), height: Number(object.height || 140) };
 
     const nextProps = {
@@ -926,10 +945,9 @@ export const CanvasPane = () => {
       const y = Number(obj.y);
       const text = typeof obj.text === 'string' ? obj.text : '';
       const fontSize = Number(obj.fontSize || 16);
-      const lines = text.split(/\n/g);
-      const estimatedWidth = Math.max(...lines.map((line: string) => Math.max(1, line.length) * (fontSize * 0.6)));
-      const width = Math.max(20, Number(obj.width || estimatedWidth));
-      const height = Math.max(18, Number(obj.height || (fontSize * 1.24 * lines.length + 4)));
+      // Use stored width/height if available (set at commit time via canvas measurement)
+      const width = Math.max(20, Number(obj.width || measureTextBounds(text, fontSize, obj.fontFamily).width));
+      const height = Math.max(18, Number(obj.height || measureTextBounds(text, fontSize, obj.fontFamily).height));
       return { left: x, top: y, right: x + width, bottom: y + height };
     }
 
@@ -1414,6 +1432,7 @@ export const CanvasPane = () => {
         text: textDraft.value,
         color: strokeColor,
         fontSize: textDraft.fontSize,
+        fontFamily: textDraft.fontFamily || DEFAULT_FONT_FAMILY,
       });
 
       if (caretVisible) {
@@ -1892,7 +1911,15 @@ export const CanvasPane = () => {
           });
         }
 
-        // No broadcast during drag — only broadcast on pointer up to avoid rate limiting
+        // Throttled broadcast at 250ms for group operations (vs 40ms for single objects)
+        const now = Date.now();
+        if (now - (gd.lastEmitAt ?? 0) >= GROUP_EMIT_INTERVAL_MS) {
+          groupDragRef.current = { ...gd, lastEmitAt: now };
+          gd.snapshots.forEach(({ id }) => {
+            const latest = objects.get(id);
+            if (latest) sendCanvasEvent(id, 'UPDATE_OBJECT', latest.type || 'shape', latest);
+          });
+        }
         return;
       }
 
@@ -1935,9 +1962,12 @@ export const CanvasPane = () => {
     if (now - (draft.lastEmitAt ?? 0) < CANVAS_EMIT_INTERVAL_MS) return;
 
     if (draft.tool === 'draw') {
-      // Append the new point to the existing stroke object (not a new segment)
+      // Append the new point only if it's far enough from the last one (thinning)
       const existing = objects.get(draft.objectId);
       const pts = Array.isArray(existing?.points) ? [...existing.points] : [{ x: draft.startX, y: draft.startY }];
+      const lastPt = pts[pts.length - 1];
+      const distSq = lastPt ? (x - lastPt.x) ** 2 + (y - lastPt.y) ** 2 : Infinity;
+      if (distSq < MIN_POINT_DISTANCE * MIN_POINT_DISTANCE) return; // too close — skip
       pts.push({ x, y });
 
       const props = {

@@ -1,6 +1,6 @@
 # Pencil.io
 
-Jai Gurudev
+
 Pencil.io is a real-time collaborative learning and creation platform where participants can draw, chat, and have full video conferencing at the same time. Multiple users join shared rooms to collaborate on a live canvas, communicate via chat, and talk face-to-face with a feature-rich media layer comparable to Zoom and Google Meet.
 
 ---

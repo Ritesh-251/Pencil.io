@@ -1,0 +1,27 @@
+{
+  "name": "ai-service",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "dev": "npm run build && npm run start"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "typescript": "latest"
+  },
+  "dependencies": {
+    "@repo/common": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/messaging": "workspace:*",
+    "@repo/validation": "workspace:*",
+    "@types/amqplib": "^0.10.8",
+    "amqplib": "^0.10.9",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1"
+  }
+}

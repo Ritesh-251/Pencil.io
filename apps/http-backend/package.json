@@ -17,7 +17,9 @@
   "description": "",
   "dependencies": {
     "@repo/auth": "workspace:*",
+    "@repo/common": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/redis": "workspace:*",
     "@repo/validation": "workspace:*",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

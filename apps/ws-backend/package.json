@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@types/ws": "^8.11.11",
     "typescript": "latest"
   },
   "keywords": [],
@@ -17,12 +18,12 @@
   "description": "",
   "dependencies": {
     "@repo/auth": "workspace:*",
+    "@repo/common": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/messaging": "workspace:*",
     "@repo/redis": "workspace:*",
+    "@repo/validation": "workspace:*",
     "@types/amqplib": "^0.10.8",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/ws": "^8.18.1",
-    "amqplib": "^0.10.9",
     "dotenv": "^17.3.1",
     "jsonwebtoken": "^9.0.3",
     "pino": "^9.9.0",

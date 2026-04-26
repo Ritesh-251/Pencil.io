@@ -1,19 +1,33 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import { HttpBackendEnvSchema } from "@repo/validation";
+
+// Validate environment before anything else
+try {
+  HttpBackendEnvSchema.parse(process.env);
+} catch (error: any) {
+  console.error("❌ Invalid environment configuration:", error.format());
+  process.exit(1);
+}
+
 import { prisma } from "@repo/db";
 import { app } from "./app";
+import { logger } from "./infra/logger";
+import { initRedis } from "./infra/redis";
 
 const PORT = process.env.PORT;
 async function startServer() {
   try {
     await prisma.$connect();
-    console.log("Postgres client connected");
+    logger.info("Postgres client connected")
+    await initRedis();
+    logger.info("Redis connected");
     app.listen(PORT, () => {
-      console.log(`Server is running at Port at ${PORT}`);
+      logger.info({ port: PORT }, "HTTP backend started")
     });
   } catch (error) {
-    console.log("DB connection failed:", error);
+    logger.error({ err: error }, "DB connection failed")
     process.exit(1);
   }
 }

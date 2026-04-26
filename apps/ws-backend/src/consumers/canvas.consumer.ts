@@ -1,3 +1,4 @@
+import { ConsumeMessage } from "amqplib";
 import { getChannel } from "../infra/rabbitmq"
 import { roomManager } from "../manager/roomManager"
 import { safePublish } from "../infra/redis"
@@ -39,7 +40,7 @@ function mapHistoryActionToCanvasAction(actionType: CanvasActionType): string {
 export async function startCanvasConsumer() {
   const channel = getChannel()
 
-  await channel.consume("canvas.queue", async (msg) => {
+  await channel.consume("canvas.queue", async (msg: ConsumeMessage | null) => {
     if (!msg) return
 
     const startedAt = Date.now()

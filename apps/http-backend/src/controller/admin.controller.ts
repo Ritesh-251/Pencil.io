@@ -2,6 +2,7 @@ import { prisma } from "@repo/db";
 import { ApiError } from "../utils/ApiError";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { Response } from "express";
+import { logger } from "../infra/logger";
 
 export const kickUser = async function (req: AuthRequest, res: Response) {
   try {
@@ -55,7 +56,12 @@ export const kickUser = async function (req: AuthRequest, res: Response) {
       });
     }
 
-    console.error(error);
+    logger.error({
+      err: error,
+      requesterId: req.userId,
+      roomId: req.params.roomId,
+      targetUserId: req.params.userId,
+    }, "kickUser failed")
 
     return res.status(500).json({
       message: "Internal server error",
@@ -110,7 +116,12 @@ export const promoteUser = async function (req: AuthRequest, res: Response) {
       });
     }
 
-    console.error(error);
+    logger.error({
+      err: error,
+      requesterId: req.userId,
+      roomId: req.params.roomId,
+      targetUserId: req.params.userId,
+    }, "promoteUser failed")
     return res.status(500).json({
       message: "Internal server error",
     });

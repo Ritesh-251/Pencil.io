@@ -1,7 +1,8 @@
 import { AuthenticatedSocket } from "../types/socket";
-import { prisma } from "@repo/db";
 import { logger } from "../infra/logger";
 import { sendSocketError } from "../utils/socket.util";
+import { assertRoomMember, isRoomAccessDeniedError } from "../services/roomAccess.service";
+import { getRecentRoomMessages } from "../services/chatRead.service";
 
 export const handleChatHistory = async function (
   socket: AuthenticatedSocket,
@@ -16,24 +17,8 @@ export const handleChatHistory = async function (
   }
 
   try {
-    const membership = await prisma.roomMember.findUnique({
-      where: {
-        userId_roomId: {
-          userId: socket.userId!,
-          roomId,
-        },
-      },
-    });
-
-    if (!membership) {
-      return sendSocketError(socket, "Not a member of this room");
-    }
-    const messages = await prisma.message.findMany({
-      where: { roomId },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-    const orderedMessages = messages.reverse();
+    await assertRoomMember(socket.userId!, roomId)
+    const orderedMessages = await getRecentRoomMessages(roomId, 50)
     socket.send(
       JSON.stringify({
         type: "chat:history",
@@ -43,6 +28,10 @@ export const handleChatHistory = async function (
       }),
     );
   } catch (error) {
+    if (isRoomAccessDeniedError(error)) {
+      return sendSocketError(socket, "Not a member of this room")
+    }
+
     logger.error({ err: error, userId: socket.userId, roomId }, "Chat history error")
     sendSocketError(socket, "Internal server error");
   }

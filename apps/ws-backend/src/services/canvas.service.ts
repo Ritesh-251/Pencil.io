@@ -96,7 +96,7 @@ export class CanvasService {
         return "points are required"
       }
 
-      if (shape.points.length > 50) {
+      if (shape.points.length > 5000) {
         return "too many points"
       }
 

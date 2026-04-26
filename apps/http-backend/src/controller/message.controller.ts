@@ -2,6 +2,7 @@ import { prisma } from "@repo/db";
 import { ApiError } from "../utils/ApiError";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { Response } from "express";
+import { logger } from "../infra/logger";
 
 export const getMessages = async function (req: AuthRequest, res: Response) {
   try {
@@ -47,7 +48,11 @@ export const getMessages = async function (req: AuthRequest, res: Response) {
       });
     }
 
-    console.error(error);
+    logger.error({
+      err: error,
+      userId: req.userId,
+      roomId: req.params.roomId,
+    }, "getMessages failed")
     return res.status(500).json({
       message: "Internal server error",
     });

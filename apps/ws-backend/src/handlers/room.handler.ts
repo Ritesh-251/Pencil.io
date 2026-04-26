@@ -1,8 +1,8 @@
-import { prisma } from "@repo/db";
 import { AuthenticatedSocket } from "../types/socket";
 import { roomManager } from "../manager/roomManager";
 import { logger } from "../infra/logger";
 import { sendSocketError } from "../utils/socket.util";
+import { assertRoomMember, isRoomAccessDeniedError } from "../services/roomAccess.service";
 
 export const handleRoomJoin = async function (
   socket: AuthenticatedSocket,
@@ -14,18 +14,8 @@ export const handleRoomJoin = async function (
     return;
   }
   try {
-    const membership = await prisma.roomMember.findUnique({
-      where: {
-        userId_roomId: {
-          userId: socket.userId!,
-          roomId,
-        },
-      },
-    });
-    if (!membership) {
-      sendSocketError(socket, "Not a member of this room")
-      return;
-    }
+    await assertRoomMember(socket.userId!, roomId)
+
     roomManager.joinRoom(roomId, socket);
     socket.send(
       JSON.stringify({
@@ -41,6 +31,11 @@ export const handleRoomJoin = async function (
       },
     });
   } catch (error) {
+    if (isRoomAccessDeniedError(error)) {
+      sendSocketError(socket, "Not a member of this room")
+      return
+    }
+
     logger.error({ err: error, userId: socket.userId, roomId }, "Room join error")
     sendSocketError(socket, "Internal server error");
   }

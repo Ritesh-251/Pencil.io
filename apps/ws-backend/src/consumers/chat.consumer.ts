@@ -1,3 +1,4 @@
+import { ConsumeMessage } from "amqplib";
 import { getChannel } from "../infra/rabbitmq"
 import { prisma } from "@repo/db"
 import { Prisma } from "@repo/db"
@@ -7,13 +8,16 @@ import { recordError, recordErrorDetail } from "../monitor/metrics"
 export async function startChatConsumer() {
   const channel = getChannel()
 
-  await channel.consume("chat.queue", async (msg) => {
+  await channel.consume("chat.queue", async (msg: ConsumeMessage | null) => {
     if (!msg) return
 
     const startedAt = Date.now()
     const event = JSON.parse(msg.content.toString())
 
-    if (event.type !== "chat.message") return
+    if (event.type !== "chat.message") {
+      channel.ack(msg)
+      return
+    }
 
     try {
       await prisma.message.create({

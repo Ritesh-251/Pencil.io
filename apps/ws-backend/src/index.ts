@@ -1,6 +1,16 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import { WsBackendEnvSchema } from "@repo/validation";
+
+// Validate environment before anything else
+try {
+  WsBackendEnvSchema.parse(process.env);
+} catch (error: any) {
+  console.error("❌ Invalid environment configuration:", error.format());
+  process.exit(1);
+}
+
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
 };
@@ -17,29 +27,8 @@ import { startQueueMonitor } from "./monitor/queueMonitor";
 import { startMetricsEngine } from "./monitor/metrics";
 import { logger } from "./infra/logger";
 
-function validateEnv() {
-  const required = [
-    "DATABASE_URL",
-    "RABBITMQ_URL",
-    "REDIS_URL",
-    "ACCESS_TOKEN_SECRET",
-    "IMAGE_UPLOAD_BASE_URL",
-    "IMAGE_CDN_BASE_URL",
-  ]
-
-  if (process.env.NODE_ENV === "production") {
-    required.push("IMAGE_UPLOAD_SIGNING_SECRET")
-  }
-
-  const missing = required.filter((key) => !process.env[key])
-  if (missing.length > 0) {
-    throw new Error(`Missing required env vars: ${missing.join(", ")}`)
-  }
-}
-
 async function bootstrap() {
   try {
-    validateEnv()
     startMetricsEngine()
  
     await prisma.$connect();
@@ -62,7 +51,10 @@ async function bootstrap() {
   
 
     pubsub.subscribe((event) => {
-      roomManager.broadCast(event.roomId, event.payload);
+      roomManager.broadCast(event.roomId, {
+        type: event.type,
+        ...event.payload,
+      });
     });
 
     await startSocketServer();

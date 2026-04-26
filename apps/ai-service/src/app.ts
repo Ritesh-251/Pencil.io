@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import aiRouter from "./ai.routes";
+import { rabbitClient } from "./infra/rabbitmq";
 
 const app: express.Application = express();
 
@@ -29,9 +30,18 @@ app.use(
 );
 
 app.use(express.json({ limit: "50mb" }));
+
 app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok" });
+  const rabbitStatus = rabbitClient.getStatus();
+  res.status(rabbitStatus.healthy ? 200 : 503).json({
+    status: rabbitStatus.healthy ? "ok" : "unhealthy",
+    timestamp: new Date().toISOString(),
+    services: {
+      rabbitmq: rabbitStatus.healthy ? "healthy" : "disconnected",
+    },
+  });
 });
+
 app.use("/ai", aiRouter);
 
 export { app };

@@ -215,7 +215,7 @@ model SessionChunk {
   id        String   @id @default(uuid())
   roomId    String
   content   String   // text of the timeline window
-  embedding Unsupported("vector(1536)")?  // OpenAI ada-002 embedding
+  embedding Unsupported("vector(1536)")?  // Gemini embedding — must match GEMINI_EMBED_DIMENSION in .env
   startMs   Int      // start of the time window this chunk covers
   endMs     Int
   createdAt DateTime @default(now())

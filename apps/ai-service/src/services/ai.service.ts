@@ -21,8 +21,15 @@ export type GenerateResponse = {
 };
 
 export class AiService {
-  private config = AiServiceEnvSchema.parse(process.env);
+  private _config: any = null;
   private discoveredEmbeddingModels: string[] | null = null;
+
+  private get config() {
+    if (!this._config) {
+      this._config = AiServiceEnvSchema.parse(process.env);
+    }
+    return this._config;
+  }
 
   async embedText(text: string): Promise<number[]> {
     const attempted: string[] = [];

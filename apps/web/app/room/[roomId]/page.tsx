@@ -265,6 +265,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
     return () => {
       offConnected();
       offPresence();
+      offJoinEvents();
       offAccessError();
       offCanvasLoad();
       offDisconnect();

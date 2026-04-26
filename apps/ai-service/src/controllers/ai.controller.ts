@@ -4,6 +4,7 @@ import { aiService } from "../services/ai.service";
 import { timelineService } from "../services/timeline.service";
 import { getChannel } from "../infra/rabbitmq";
 import { SYSTEM_PROMPTS } from "../prompts";
+import { logger } from "../infra/logger";
 
 export class AiController {
   async ingest(req: Request, res: Response) {
@@ -13,10 +14,13 @@ export class AiController {
       if (!roomId) return res.status(400).json({ message: "Room ID required" });
 
       const channel = getChannel();
+      if (!channel) throw new Error("RabbitMQ channel not available");
+
       channel.sendToQueue("ai:ingest", Buffer.from(JSON.stringify({ roomId, includeTranscript })), { persistent: true });
 
       return res.status(202).json({ message: "Ingestion started in background", status: "PENDING" });
     } catch (error: any) {
+      logger.error({ error, roomId: req.params.roomId }, "Failed to initiate ingestion");
       return res.status(500).json({ message: error.message });
     }
   }
@@ -133,7 +137,7 @@ export class AiController {
 
       channel.publish("events.exchange", "email.summary", content, { persistent: true });
     } catch (error) {
-      console.error("[AiController] Failed to notify participants", error);
+      logger.error({ error, roomId }, "Failed to notify participants via email");
     }
   }
 }

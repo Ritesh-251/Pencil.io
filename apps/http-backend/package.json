@@ -9,6 +9,8 @@
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "typescript": "latest"
   },
   "keywords": [],
@@ -28,6 +30,12 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "livekit-server-sdk": "^2.15.1"
+    "express-rate-limit": "^8.4.1",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.10.0",
+    "livekit-server-sdk": "^2.15.1",
+    "rate-limit-redis": "^4.3.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   }
 }

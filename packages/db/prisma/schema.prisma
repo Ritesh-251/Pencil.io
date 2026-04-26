@@ -97,9 +97,8 @@ model Message {
   user User @relation(fields: [userId], references: [id])
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
-  @@index([roomId])
+  @@index([roomId, createdAt])
   @@index([userId])
-  @@index([createdAt])
 }
 
 
@@ -218,7 +217,7 @@ model SessionChunk {
 
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
-  @@index([roomId])
+  @@index([roomId, createdAt])
   @@index([roomId, startMs])
 }
 

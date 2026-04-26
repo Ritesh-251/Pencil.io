@@ -91,7 +91,14 @@ async function refreshAccessToken(): Promise<string | null> {
       return null;
     }
 
-    const data = await res.json().catch(() => ({}));
+    let data: any = {};
+    const text = await res.text();
+    try {
+      if (text) data = JSON.parse(text);
+    } catch (e) {
+      // Not JSON
+    }
+
     const newToken = data?.token ?? data?.accessToken;
     if (!newToken || typeof newToken !== 'string') {
       localStorage.removeItem('token');
@@ -122,6 +129,7 @@ async function fetchX(path: string, options: RequestInit = {}) {
   if (token) headers.set('Authorization', `Bearer ${token}`);
 
   let res = await fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'include' });
+  
   if (res.status === 401 && shouldTryRefresh(path)) {
     const refreshedToken = await refreshAccessToken();
     if (refreshedToken) {
@@ -139,9 +147,18 @@ async function fetchX(path: string, options: RequestInit = {}) {
   if (res.status === 401) {
     throw new ApiClientError('Unauthorized', 401);
   }
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new ApiClientError(error.message || 'API request failed', res.status, error);
+
+  const text = await res.text();
+  let payload: any = {};
+  try {
+    if (text) payload = JSON.parse(text);
+  } catch (e) {
+    // Not JSON
   }
-  return res.json();
+
+  if (!res.ok) {
+    throw new ApiClientError(payload.message || `Request failed with status ${res.status}`, res.status, payload);
+  }
+
+  return payload;
 }

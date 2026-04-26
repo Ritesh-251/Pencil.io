@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Room } from "livekit-client";
 
 export type MediaStatus =
   | "idle"
@@ -26,6 +27,7 @@ export type ReactionEvent = {
 };
 
 interface MediaState {
+  room: Room | null;
   status: MediaStatus;
   error: string | null;
   audioEnabled: boolean;
@@ -40,8 +42,10 @@ interface MediaState {
   raisedHands: Set<string>;
   /** Live reaction bubbles; pruned automatically. */
   reactions: ReactionEvent[];
+  transcriptEnabled: boolean;
 
   setStatus: (status: MediaStatus) => void;
+  setRoom: (room: Room | null) => void;
   setError: (error: string | null) => void;
   setDevices: (input: { audioEnabled: boolean; videoEnabled: boolean; screenShareEnabled: boolean }) => void;
   setNoiseSuppression: (enabled: boolean) => void;
@@ -50,10 +54,12 @@ interface MediaState {
   setRaisedHand: (identity: string, raised: boolean) => void;
   addReaction: (reaction: ReactionEvent) => void;
   pruneReactions: (before: number) => void;
+  setTranscriptEnabled: (enabled: boolean) => void;
   reset: () => void;
 }
 
 const initialState = {
+  room: null as Room | null,
   status: "idle" as MediaStatus,
   error: null,
   audioEnabled: false,
@@ -64,10 +70,12 @@ const initialState = {
   activeSpeakers: [] as string[],
   raisedHands: new Set<string>(),
   reactions: [] as ReactionEvent[],
+  transcriptEnabled: false,
 };
 
 export const useMediaStore = create<MediaState>((set) => ({
   ...initialState,
+  setRoom: (room) => set({ room }),
   setStatus: (status) => set({ status }),
   setError: (error) => set({ error }),
   setDevices: ({ audioEnabled, videoEnabled, screenShareEnabled }) =>
@@ -86,5 +94,6 @@ export const useMediaStore = create<MediaState>((set) => ({
     set((s) => ({ reactions: [...s.reactions, reaction] })),
   pruneReactions: (before) =>
     set((s) => ({ reactions: s.reactions.filter((r) => r.at >= before) })),
+  setTranscriptEnabled: (enabled) => set({ transcriptEnabled: enabled }),
   reset: () => set({ ...initialState, raisedHands: new Set<string>(), reactions: [] }),
 }));

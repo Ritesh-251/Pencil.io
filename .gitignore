@@ -34,9 +34,10 @@ prisma.config.d.ts.map
 
 # Debug
 npm-debug.log*
-yarn-debug.log*
+yarn-debug.log* 
 yarn-error.log*
 
 # Misc
 .DS_Store
 *.pem
+.aider*

@@ -200,6 +200,17 @@ NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880
 
 The HTTP backend mints short-lived media tokens after validating room membership. The frontend uses these tokens to connect directly to the LiveKit server — media streams never pass through the application backend.
 
+### AI Service
+
+```bash
+GEMINI_API_KEY=...
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_SUMMARY_MODEL=gemini-2.5-flash-lite
+GEMINI_EMBED_MODEL=text-embedding-004
+```
+
+The AI service uses Gemini for retrieval and summaries, with an Ollama fallback for generation if Gemini is unavailable.
+
 ---
 
 ## Realtime Flow (Simplified)

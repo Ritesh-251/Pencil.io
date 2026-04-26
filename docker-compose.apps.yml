@@ -1,0 +1,101 @@
+version: '3.8'
+services:
+  http-backend:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: apps/http-backend/Dockerfile
+    container_name: pencil-http-backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ritesh:ritesh25@postgres:5432/pencil
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      AI_SERVICE_URL: http://ai-service:3004
+      ACCESS_TOKEN_SECRET: dev_access_secret
+      REFRESH_TOKEN_SECRET: dev_refresh_secret
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
+      INTERNAL_SECRET: internal-dev-secret
+    ports:
+      - "3001:3001"
+
+  ws-backend:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: apps/ws-backend/Dockerfile
+    container_name: pencil-ws-backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    environment:
+      PORT: 3003
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ritesh:ritesh25@postgres:5432/pencil
+      REDIS_URL: redis://redis:6379
+      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
+      ACCESS_TOKEN_SECRET: dev_access_secret
+      IMAGE_UPLOAD_BASE_URL: http://ws-backend:3003/upload
+      IMAGE_CDN_BASE_URL: http://ws-backend:3003/upload
+    ports:
+      - "3003:3003"
+
+  ai-service:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: apps/ai-service/Dockerfile
+    container_name: pencil-ai-service
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      PORT: 3004
+      NODE_ENV: production
+      DATABASE_URL: postgresql://ritesh:ritesh25@postgres:5432/pencil
+    ports:
+      - "3004:3004"
+
+  web:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: pencil-web
+    restart: unless-stopped
+    depends_on:
+      - http-backend
+      - ws-backend
+      - ai-service
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
+  transcript:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: apps/transcript/Dockerfile
+    container_name: pencil-transcript
+    restart: unless-stopped
+    depends_on:
+      - http-backend
+      - livekit
+    environment:
+      HTTP_BACKEND_URL: http://http-backend:3001
+      INTERNAL_SECRET: internal-dev-secret
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret

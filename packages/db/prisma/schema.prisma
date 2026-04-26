@@ -1,10 +1,12 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 
@@ -18,6 +20,7 @@ model User {
   messages      Message[]
   rooms         RoomMember[]
   ownedRooms    Room[] @relation("RoomCreator")
+  joinRequests  JoinRequest[]
 }
 
 model RefreshToken {
@@ -53,6 +56,14 @@ model Room {
   members  RoomMember[]
   messages Message[]
 
+  joinRequests        JoinRequest[]
+  canvasObjects       CanvasObject[]
+  canvasSnapshots     CanvasSnapshot[]
+  canvasActionHistory CanvasActionHistory[]
+  transcriptSegments  TranscriptSegment[]
+  sessionChunks       SessionChunk[]
+  sessionSummary      SessionSummary?
+
   @@index([createdBy])
 }
 
@@ -84,7 +95,7 @@ model Message {
   roomId String
 
   user User @relation(fields: [userId], references: [id])
-  room Room @relation(fields: [roomId], references: [id])
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId])
   @@index([userId])
@@ -106,6 +117,8 @@ model CanvasObject {
   createdAt DateTime
   updatedAt DateTime
 
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
   @@index([roomId, version])    
   @@index([roomId, time, actorId])
   @@index([roomId, createdAt])
@@ -119,6 +132,8 @@ model CanvasSnapshot {
   data      Json
   version   Int
   createdAt DateTime
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, version])
   @@index([roomId, type, version])
@@ -153,6 +168,7 @@ model CanvasActionHistory {
 
   createdAt DateTime @default(now())
 
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, version])
   @@index([roomId, userId, version])
@@ -170,6 +186,70 @@ model CanvasActionHistory {
 model ProcessedEvent {
   eventId  String   @id
   createdAt DateTime @default(now())
+}
+
+// ─── Stage 7: Transcription ───────────────────────────────────────────────────
+
+model TranscriptSegment {
+  id                  String   @id @default(uuid())
+  roomId              String
+  participantIdentity String   // LiveKit participant identity
+  text                String
+  startMs             Int      // ms offset from session start
+  endMs               Int
+  createdAt           DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, startMs])
+  @@index([roomId, createdAt])
+}
+
+// ─── Stage 8: AI RAG ─────────────────────────────────────────────────────────
+
+model SessionChunk {
+  id        String   @id @default(uuid())
+  roomId    String
+  content   String   // text of the timeline window
+  embedding Unsupported("vector(1536)")?  // OpenAI ada-002 embedding
+  startMs   Int      // start of the time window this chunk covers
+  endMs     Int
+  createdAt DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([roomId, startMs])
+}
+
+model SessionSummary {
+  id        String   @id @default(uuid())
+  roomId    String   @unique
+  summary   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model JoinRequest {
+  id        String   @id @default(uuid())
+  roomId    String
+  userId    String
+  status    JoinRequestStatus @default(PENDING)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId])
+  @@index([roomId])
+}
+
+enum JoinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum CanvasActionType {

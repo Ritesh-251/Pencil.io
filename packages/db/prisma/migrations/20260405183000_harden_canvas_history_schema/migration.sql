@@ -9,14 +9,16 @@ END $$;
 
 -- Backfill actionType to new enum-compatible values.
 UPDATE "CanvasActionHistory"
-SET "actionType" = CASE
-  WHEN "actionType" IN ('CREATE_OBJECT', 'CREATE') THEN 'CREATE'
-  WHEN "actionType" IN ('UPDATE_OBJECT', 'UPDATE') THEN 'UPDATE'
-  WHEN "actionType" IN ('DELETE_OBJECT', 'DELETE') THEN 'DELETE'
-  WHEN "actionType" = 'UNDO' THEN 'UNDO'
-  WHEN "actionType" = 'REDO' THEN 'REDO'
-  ELSE 'UPDATE'
-END
+SET "actionType" = (
+  CASE
+    WHEN "actionType"::text IN ('CREATE_OBJECT', 'CREATE') THEN 'CREATE'
+    WHEN "actionType"::text IN ('UPDATE_OBJECT', 'UPDATE') THEN 'UPDATE'
+    WHEN "actionType"::text IN ('DELETE_OBJECT', 'DELETE') THEN 'DELETE'
+    WHEN "actionType"::text = 'UNDO' THEN 'UNDO'
+    WHEN "actionType"::text = 'REDO' THEN 'REDO'
+    ELSE 'UPDATE'
+  END
+)::"CanvasActionType"
 WHERE "actionType" IS NOT NULL;
 
 -- Enforce patch shape and required fields for replay safety.
@@ -64,7 +66,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS "CanvasActionHistory_eventId_key" ON "CanvasAc
 DROP INDEX IF EXISTS "CanvasActionHistory_eventId_idx";
 CREATE INDEX IF NOT EXISTS "CanvasActionHistory_objectId_version_idx" ON "CanvasActionHistory"("objectId", "version");
 CREATE INDEX IF NOT EXISTS "CanvasActionHistory_roomId_createdAt_idx" ON "CanvasActionHistory"("roomId", "createdAt");
-CREATE INDEX IF NOT EXISTS "RoomVersion_roomId_idx" ON "RoomVersion"("roomId");
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'RoomVersion') THEN
+    CREATE INDEX IF NOT EXISTS "RoomVersion_roomId_idx" ON "RoomVersion"("roomId");
+  END IF;
+END $$;
 
 -- Hot path for filtering active objects.
 CREATE INDEX IF NOT EXISTS "idx_canvas_not_deleted"

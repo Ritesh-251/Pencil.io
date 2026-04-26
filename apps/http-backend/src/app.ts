@@ -73,11 +73,11 @@ app.get("/health", async (_req, res) => {
 	}
 });
 
-// 5. API Routes
+// 6. API Routes
 app.use("/api/v1/auth", userRouter);
-app.use("/api/v1/users", userRouter);
 app.use("/api/v1/rooms", roomsRouter);
 app.use("/api/v1/planning", planningRouter);
 app.use("/api/internal", internalRouter);
+
 
 export { app };

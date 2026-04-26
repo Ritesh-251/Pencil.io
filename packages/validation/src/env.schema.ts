@@ -15,6 +15,12 @@ export const HttpBackendEnvSchema = CommonEnvSchema.extend({
   LIVEKIT_API_KEY: z.string(),
   LIVEKIT_API_SECRET: z.string(),
   INTERNAL_SECRET: z.string(),
+  RABBITMQ_URL: z.string().url(),
+  FRONTEND_URL: z.string().url().default("http://localhost:3000"),
+  SMTP_HOST: z.string(),
+  SMTP_PORT: z.string().transform(Number).default(465 as any),
+  SMTP_USER: z.string().email(),
+  SMTP_PASS: z.string(),
 });
 
 export const WsBackendEnvSchema = CommonEnvSchema.extend({

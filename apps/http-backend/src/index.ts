@@ -25,12 +25,13 @@ async function startServer() {
     logger.info("Postgres client connected")
     await initRedis();
     logger.info("Redis connected");
-    await initRabbitMQ();
-    logger.info("RabbitMQ connected");
 
     onRabbitReady(async () => {
       await startEmailConsumer();
     });
+
+    await initRabbitMQ();
+    logger.info("RabbitMQ connected");
 
     app.listen(PORT, () => {
       logger.info({ port: PORT }, "HTTP backend started")

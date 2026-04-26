@@ -17,11 +17,14 @@ function isAuthorized(authHeader: string | undefined) {
   const internalSecret = process.env.INTERNAL_SECRET;
   if (!internalSecret) return false;
   if (!authHeader?.startsWith("Bearer ")) return false;
+  
   const provided = authHeader.slice("Bearer ".length);
-  const expected = Buffer.from(internalSecret);
-  const actual = Buffer.from(provided);
-  if (expected.length !== actual.length) return false;
-  return crypto.timingSafeEqual(expected, actual);
+  
+  // Use hash comparison to avoid timing leaks of input length
+  const expectedHash = crypto.createHash('sha256').update(internalSecret).digest();
+  const actualHash = crypto.createHash('sha256').update(provided).digest();
+  
+  return crypto.timingSafeEqual(expectedHash, actualHash);
 }
 
 const createTranscriptHandler: RequestHandler = async (req, res) => {

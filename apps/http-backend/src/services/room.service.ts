@@ -64,8 +64,9 @@ export class RoomService {
       if (!member) throw new ApiError(404, "User not part of the room");
 
       await tx.roomMember.delete({ where: { userId_roomId: { userId, roomId } } });
+      
       const updatedRoom = await tx.room.update({
-        where: { id: roomId },
+        where: { id: roomId, memberCount: { gt: 0 } },
         data: { memberCount: { decrement: 1 } },
       });
 

@@ -1,20 +1,16 @@
-import pino from "pino"
+import { createLogger } from "@repo/common";
 
-type PipelineStage = "publish" | "consume" | "broadcast"
+export const logger = createLogger("ws-backend");
 
-export const logger = pino({
-  level: process.env.LOG_LEVEL || "info",
-  base: null,
-  timestamp: pino.stdTimeFunctions.isoTime,
-})
+type PipelineStage = "publish" | "consume" | "broadcast";
 
 export function logEvent(
   stage: PipelineStage,
   event: {
-    id?: string
-    roomId?: string
-    userId?: string
-    type?: string
+    id?: string;
+    roomId?: string;
+    userId?: string;
+    type?: string;
   },
   extra?: Record<string, unknown>,
 ) {
@@ -25,5 +21,5 @@ export function logEvent(
     userId: event.userId || null,
     type: event.type || null,
     ...extra,
-  })
+  });
 }

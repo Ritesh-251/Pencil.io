@@ -42,7 +42,7 @@ class EventPublisher {
         event.type,
         Buffer.from(JSON.stringify(event)),
         { persistent: true },
-        (err) => {
+        (err: any) => {
           if (err) {
             recordError()
             logger.error({

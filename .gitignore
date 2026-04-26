@@ -41,3 +41,6 @@ yarn-error.log*
 .DS_Store
 *.pem
 .aider*
+
+# Uploads
+apps/ws-backend/.uploads/

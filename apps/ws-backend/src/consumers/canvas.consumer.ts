@@ -341,7 +341,8 @@ export async function startCanvasConsumer() {
         error,
       }, "Canvas consumer error")
 
-      // ❗ DO NOT ACK → RabbitMQ retry
+      // Explicitly NACK to requeue for retry and free the prefetch slot
+      channel.nack(msg, false, true);
     }
   })
 }

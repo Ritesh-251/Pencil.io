@@ -15,6 +15,7 @@ export async function startBroadcastConsumer() {
     const event = JSON.parse(msg.content.toString())
 
     if (event.type !== "chat.message") {
+      logger.warn({ eventType: event.type, eventId: event.id }, "broadcast.consumer: unknown event type, skipping")
       channel.ack(msg)
       return
     }

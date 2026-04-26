@@ -1,274 +1,134 @@
 # Pencil.io
 
+**Pencil.io** is a high-performance, distributed, real-time collaborative platform. It combines a custom CRDT-based canvas, instant messaging, and multi-user video conferencing (via LiveKit) with an advanced AI-driven transcription and summarization engine.
 
-Pencil.io is a real-time collaborative learning and creation platform where participants can draw, chat, and have full video conferencing at the same time. Multiple users join shared rooms to collaborate on a live canvas, communicate via chat, and talk face-to-face with a feature-rich media layer comparable to Zoom and Google Meet.
-
----
-
-## What This App Does
-
-- **Live collaborative canvas** — draw, annotate, add shapes, arrows, sticky notes and images; all synced in real time across every participant
-- **Real-time chat** — room-wide messaging with presence indicators
-- **Full-featured video conferencing** — camera, microphone, screen sharing, and advanced interaction tools (see Media Features below)
-- **Event-driven backend** — reliable multi-user sync through a distributed message queue  
-- **AI-assisted context** — transcript and summarisation support during live sessions
+Built with a focus on **concurrency, observability, and resilience**, Pencil.io is architected as a production-ready monorepo using Turborepo and a microservices-based backend.
 
 ---
 
-## Media / Video Features
+## 🏗 System Architecture
 
-The media layer is built on LiveKit and supports a full Zoom/Meet-comparable feature set:
+The system is designed for massive scale, utilizing a decoupled, event-driven architecture.
 
-| Feature | Details |
-|---|---|
-| **Active speaker highlight** | Speaking participants get a pulsing green ring on their tile in real time |
-| **Raise hand** | Data-channel signalling; hand badge appears on tile for all participants, auto-lowers after 60 s |
-| **Emoji reactions** | Floating emoji animations (`floatUp` CSS keyframes) rendered above participant tiles |
-| **Noise suppression** | Krisp AI noise filter (`@livekit/krisp-noise-filter`) toggled per-session |
-| **Multi-screenshare** | Multiple presenters simultaneously; tab bar to switch the spotlight view |
-| **Participant pin** | Hover any tile → pin button appears; pinned participant shown in full spotlight, others in thumbnail strip |
-| **Picture-in-Picture** | Document PiP (Chrome 116+) or video PiP fallback; full carousel inside the PiP window |
-| **PiP carousel** | ‹ › arrows + dot indicators navigate between screenshare and all camera tiles; Pin/Unpin inside PiP works independently for screenshares too |
-
----
-
-## Architecture At A Glance
-
-The system is split into two main backend services connected through an event-driven core.
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Next.js Frontend                    │
-│  Canvas (custom 2D engine)  │  Chat  │  Media (LiveKit) │
-└──────────────────┬──────────────────────────────────────┘
-                   │  HTTP + WebSocket
-      ┌────────────┴────────────┐
-      │                         │
-┌─────┴──────┐        ┌────────┴────────┐
-│ http-backend│        │  ws-backend     │
-│ auth, rooms │        │  sockets, CRDT  │
-│ media tokens│        │  canvas / chat  │
-└─────┬──────┘        └────────┬────────┘
-      │                         │
-      └──────────┬──────────────┘
-                 │
-     ┌───────────┴───────────────┐
-     │      Shared Infra         │
-     │  RabbitMQ · Redis         │
-     │  Postgres (Prisma)        │
-     │  LiveKit (media server)   │
-     └───────────────────────────┘
+### **High-Level Topology**
+```mermaid
+graph TD
+    A[Next.js Frontend] -->|WS| B[WebSocket Backend]
+    A -->|HTTP| C[HTTP Backend]
+    B <-->|Pub/Sub| D[Redis]
+    B -->|Events| E[RabbitMQ]
+    E -->|Consumer| F[Postgres/Prisma]
+    E -->|Consumer| G[AI Service]
+    G -->|Vector Store| F
+    H[LiveKit] <--> A
+    C -->|Auth/Health| F
 ```
 
-- **HTTP backend** — authentication, room APIs, LiveKit media token minting
-- **WebSocket backend** — socket lifecycle, room presence, CRDT canvas sync, chat fan-out
-- **RabbitMQ** — async event flow between services (email workers, replay, processing)
-- **Redis** — pub/sub and fast cross-process coordination
-- **Postgres + Prisma** — durable persistence and recoverability
-- **LiveKit** — E2E-encrypted real-time media transport (audio/video/screenshare/data channels)
+- **HTTP Backend (Express):** Manages Auth, Room lifecycle, and LiveKit token minting.
+- **WebSocket Backend (ws):** Handles presence, real-time CRDT synchronization, and event fan-out.
+- **AI Service (Node.js):** Performs background ingestion, RAG (Retrieval-Augmented Generation), and session summarization.
+- **Transcript Service (Python):** Specialized agent for real-time speech-to-text processing via LiveKit.
+- **Shared Packages:** Optimized monorepo architecture with shared `@repo/db`, `@repo/common`, `@repo/messaging`, and `@repo/validation`.
 
 ---
 
-## Repository Layout
+## 🚀 Key Engineering Features
 
-```text
-apps/
-  web/              # Next.js 16 frontend (App Router)
-  http-backend/     # Express — auth, room/media token endpoints
-  ws-backend/       # ws — realtime sockets, handlers, event routing
+### **1. Real-Time Consistency & CRDTs**
+*   **Conflict-Free Replication:** Utilizes a custom CRDT (Conflict-free Replicated Data Type) engine to allow simultaneous drawing without data loss.
+*   **Hybrid Logical Clocks (HLC):** Implements HLC to provide causality tracking and deterministic event ordering across distributed service instances.
+*   **Replayability:** Every state change is backed by an event log, allowing for full state reconstruction and session replay.
 
-packages/
-  auth/             # JWT / password helpers
-  db/               # Prisma schema, migrations, db client
-  redis/            # Shared Redis and pub/sub wrappers
-  validation/       # Shared request/event validation schemas
-  ui/               # Shared React UI components
-  eslint-config/    # Lint rules
-  typescript-config/
-```
+### **2. Infrastructure Resilience & Security**
+*   **Hardened Security:** Integrated **Helmet.js** for secure HTTP headers, protecting against XSS, clickjacking, and MIME-sniffing.
+*   **Distributed Rate Limiting:** Redis-backed rate limiting (`express-rate-limit` + `rate-limit-redis`) across all instances to prevent resource exhaustion and brute-force attacks.
+*   **Deep Health Checks:** Advanced `/health` monitoring that verifies the status of downstream dependencies (PostgreSQL, Redis, RabbitMQ) rather than just the service status.
 
----
+### **3. Observability & Self-Documentation**
+*   **Structured Logging:** Standardized **Pino** logging across all services. Logs are JSON-formatted and include contextual metadata (`roomId`, `traceId`) for easy ingestion into ELK/DataDog.
+*   **Interactive API Docs:** Auto-generated **OpenAPI/Swagger** documentation available at `/api-docs` for real-time testing and seamless frontend-backend integration.
 
-## Tech Stack
-
-### Monorepo & Tooling
-- **Turborepo** — task orchestration and caching
-- **pnpm workspaces** — package management
-- **TypeScript** — across all apps and packages
-- **ESLint + Prettier** — code quality
-
-### Frontend
-- **Next.js 16** (App Router)
-- **React 19**
-- **Zustand** — client state management
-- **TailwindCSS + PostCSS**
-- **livekit-client** — media room SDK
-- **@livekit/krisp-noise-filter** — AI noise suppression
-
-### Backend
-- **Node.js + TypeScript**
-- **Express** (HTTP backend)
-- **ws** (WebSocket backend)
-- **amqplib** — RabbitMQ client
-- **pino** — structured logging
-- **jsonwebtoken** — auth token handling
-
-### Data & Media
-- **Prisma ORM + PostgreSQL** — persistence
-- **LiveKit** — media server + client SDK
-- **Redis** — pub/sub, ephemeral state
+### **4. AI-Driven Insights**
+*   **Timeline Ingestion:** Real-time event streams are processed into vector embeddings.
+*   **RAG Querying:** Users can query the room's history using natural language, powered by Google Gemini and specialized vector search.
 
 ---
 
-## Getting Started
+## 🛠 Tech Stack
 
-### Prerequisites
+### **Infrastructure**
+- **Turborepo** — Monorepo orchestration
+- **pnpm workspaces** — Package management
+- **Docker + Docker Compose** — Containerized local infrastructure
+- **GitHub Actions** — Automated CI/CD (Lint, Type-check, Test, Build)
 
-- Node.js 18+
-- pnpm 9+
-- Docker and Docker Compose
+### **Backend**
+- **Node.js (TypeScript)** / **Python** (Transcript)
+- **Express** / **FastAPI**
+- **RabbitMQ** — Event-driven messaging
+- **Redis** — Distributed locks and Pub/Sub
+- **PostgreSQL + Prisma** — High-performance ORM and Vector Store
+- **Vitest** — Modern testing framework for unit and integration tests
 
-### 1. Install dependencies
+### **Frontend**
+- **Next.js 16 (App Router)** + **React 19**
+- **TailwindCSS** + **Zustand**
+- **LiveKit Client** — Low-latency WebRTC media engine
 
+---
+
+## 🚦 Getting Started
+
+### 1. Install Dependencies
 ```bash
 pnpm install
 ```
 
-### 2. Start infrastructure services
-
+### 2. Infrastructure
 ```bash
 docker compose up -d
 ```
+Starts PostgreSQL (with `pgvector`), Redis, RabbitMQ, and LiveKit.
 
-This starts PostgreSQL, Redis, RabbitMQ, and the local LiveKit server.
-
-### 3. Run database migrations
-
+### 3. Database Setup
 ```bash
 cd packages/db && pnpm prisma migrate dev
 ```
 
-### 4. Run all applications
-
+### 4. Run Services
 ```bash
-pnpm run dev
+pnpm dev
 ```
 
-Turborepo starts all apps concurrently:
-
-| App | Default port |
-|---|---|
-| `web` (Next.js) | 3000 |
-| `http-backend` | 3001 |
-| `ws-backend` | 3003 |
-| LiveKit (Docker) | 7880 |
-
-### 5. Useful scripts
-
-```bash
-pnpm run build         # production build (all apps)
-pnpm run lint          # lint all packages
-pnpm run check-types   # TypeScript type-check all packages
-pnpm run format        # Prettier format
-```
+| Service | Endpoint | Port |
+|---|---|---|
+| Web App | `http://localhost:3000` | 3000 |
+| API Docs | `http://localhost:3001/api-docs` | 3001 |
+| HTTP Health | `http://localhost:3001/health` | 3001 |
+| WS Health | `http://localhost:3003/health` | 3003 |
 
 ---
 
-## Environment Configuration
+## 🛡 Security & Quality Gates (CI/CD)
 
-Copy `.env.example` to `.env.local` (web) and `.env` (backends) and fill in:
+The project enforces strict quality gates on every Pull Request via **GitHub Actions**:
 
-### Core (all backends)
-
-```bash
-NODE_ENV=development
-DATABASE_URL=postgresql://<user>:<password>@localhost:5432/<db>
-REDIS_URL=redis://localhost:6379
-RABBITMQ_URL=amqp://localhost:5672
-```
-
-### LiveKit (http-backend + web)
-
-```bash
-LIVEKIT_URL=ws://localhost:7880
-LIVEKIT_API_KEY=devkey
-LIVEKIT_API_SECRET=secret
-LIVEKIT_TOKEN_TTL=2h
-NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880
-```
-
-The HTTP backend mints short-lived media tokens after validating room membership. The frontend uses these tokens to connect directly to the LiveKit server — media streams never pass through the application backend.
-
-### AI Service
-
-```bash
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-2.5-flash-lite
-GEMINI_SUMMARY_MODEL=gemini-2.5-flash-lite
-GEMINI_EMBED_MODEL=text-embedding-004
-```
-
-The AI service uses Gemini for retrieval and summaries, with an Ollama fallback for generation if Gemini is unavailable.
+- ✅ **Linting:** Code style consistency (ESLint/Prettier).
+- ✅ **Type Checking:** Full TypeScript validation across the workspace.
+- ✅ **Automated Testing:** Unit and Integration tests (Vitest).
+- ✅ **Build Validation:** Ensures production builds are successful.
 
 ---
 
-## Realtime Flow (Simplified)
-
-```
-1. User action (canvas draw / chat message / media toggle) on frontend
-2. Event sent to ws-backend over WebSocket
-3. ws-backend normalises event → publishes to RabbitMQ
-4. Consumer validates → writes to Postgres (durable state)
-5. ws-backend broadcasts update to all room participants
-6. Canvas CRDT reconciles concurrent edits deterministically
-```
-
-Media (audio/video) travels directly between clients via LiveKit's WebRTC transport — it is never routed through the application backend.
+## 📈 Database Optimization
+Pencil.io utilizes optimized PostgreSQL indexing strategies:
+- **Composite Indexes:** Optimized for room-based chronological fetching (`roomId`, `createdAt`).
+- **Vector Search:** `pgvector` enabled for high-dimensional embedding similarity searches.
+- **Snapshotting:** Regular base-layer snapshots to minimize CRDT merge latency.
 
 ---
 
-## Canvas Architecture
-
-The canvas is a custom 2D engine built on the native HTML `<canvas>` API (no Fabric.js or Konva dependency):
-
-- **Rendering** — a single `useEffect` runs a full redraw pass on every state change using a `drawAllRef` pattern; the ResizeObserver calls the same pass after any layout reflow so content is never lost when panels toggle
-- **CRDT sync** — object state is held in a Zustand store; incoming WS events are merged with HLC timestamps for conflict-free resolution
-- **Tools** — pan/zoom, pen, eraser, arrow, rectangle, ellipse, text (multi-line), sticky note, image upload
-
----
-
-## CI/CD Expectations
-
-**Continuous integration** should run on every pull request:
-
-- `pnpm install` — dependency resolution
-- `pnpm lint` — lint all packages
-- `pnpm check-types` — TypeScript validation
-- `pnpm build` — production build
-- `prisma validate` — schema sanity check
-
-**Continuous delivery**:
-
-- Build and push Docker images per service
-- Deploy to target environment
-- Run health checks post-deploy
-- Rollback automatically on failure
-
----
-
-## Reliability Principles
-
-- **Event-first** consistency — no direct write shortcuts that bypass the event queue
-- **Replayability** — shared state can be reconstructed from the event log
-- **Service isolation** — services communicate via queues, not direct calls
-- **Observability by default** — structured logging with `pino`, errors always surfaced with context
-
----
-
-## Notes For Contributors
-
-- Never bypass the event flow for realtime features — always publish through RabbitMQ
-- Keep canvas CRDT logic deterministic; test concurrent edits before merging
-- Media features go in `apps/web/src/components/workspace/MediaPanel.tsx` and `apps/web/src/lib/livekit.ts`
-- New environment variables must be documented here and added to `.env.example`
-- Add TypeScript types for all new WS event payloads in the `validation` package
+## 📝 Contributors Note
+- All new real-time features must pass through the **RabbitMQ Event Pipeline**.
+- Maintain deterministic CRDT logic; use the provided `Vitest` suite for new handlers.
+- Add OpenAPI annotations for all new HTTP endpoints.

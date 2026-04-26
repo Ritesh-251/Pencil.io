@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { AuthBootstrap } from "@/components/auth/AuthBootstrap";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -24,6 +25,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        {/* Silently restores access token from httpOnly cookie on every page load */}
+        <AuthBootstrap />
         {children}
       </body>
     </html>

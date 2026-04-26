@@ -1,13 +1,44 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
 
+// ─── Proper Types ─────────────────────────────────────────────────────────────
+
+export interface Room {
+  roomId: string;
+  id: string;
+  name: string;
+  role: 'ADMIN' | 'MEMBER';
+  memberCount: number;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  lastMessage: { content: string; createdAt: string } | null;
+}
+
+export interface ChatMessage {
+  id?: string;
+  messageId?: string;
+  content: string;
+  userId: string;
+  roomId?: string;
+  createdAt?: string;
+  timestamp?: number;
+}
+
+export interface PresenceUser {
+  id: string;
+  name: string;
+  status?: 'online' | 'offline';
+}
+
+// ─── Room Store ───────────────────────────────────────────────────────────────
+
 interface RoomState {
-  rooms: any[];
-  currentRoom: any | null;
+  rooms: Room[];
+  currentRoom: Room | null;
   loading: boolean;
   fetchRooms: () => void;
-  setCurrentRoom: (r: any) => void;
+  setCurrentRoom: (r: Room | null) => void;
 }
+
 export const useRoomStore = create<RoomState>((set) => ({
   rooms: [],
   currentRoom: null,
@@ -16,9 +47,11 @@ export const useRoomStore = create<RoomState>((set) => ({
     set({ loading: true });
     try {
       const res = await api.get('/api/v1/rooms');
-      const rooms = (res.rooms ?? []).map((room: any) => ({
+      const rooms: Room[] = (res.rooms ?? []).map((room: any) => ({
         ...room,
+        // Normalize: API may return either roomId or id depending on the endpoint
         id: room.id ?? room.roomId,
+        roomId: room.roomId ?? room.id,
       }));
       set({ rooms });
     } catch (error) {
@@ -28,33 +61,41 @@ export const useRoomStore = create<RoomState>((set) => ({
       set({ loading: false });
     }
   },
-  setCurrentRoom: (currentRoom) => set({ currentRoom })
+  setCurrentRoom: (currentRoom) => set({ currentRoom }),
 }));
+
+// ─── Chat Store ───────────────────────────────────────────────────────────────
 
 interface ChatState {
-  messages: any[];
-  addMessage: (m: any) => void;
+  messages: ChatMessage[];
+  addMessage: (m: ChatMessage) => void;
 }
+
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
-  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] }))
+  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
 }));
 
+// ─── Presence Store ───────────────────────────────────────────────────────────
+
 interface PresenceState {
-  users: Map<string, any>;
+  users: Map<string, PresenceUser>;
   setOnline: (id: string, name: string) => void;
   setOffline: (id: string) => void;
 }
+
 export const usePresenceStore = create<PresenceState>((set) => ({
   users: new Map(),
-  setOnline: (id, name) => set((s) => {
-    const next = new Map(s.users);
-    next.set(id, { id, name });
-    return { users: next };
-  }),
-  setOffline: (id) => set((s) => {
-    const next = new Map(s.users);
-    next.delete(id);
-    return { users: next };
-  })
+  setOnline: (id, name) =>
+    set((s) => {
+      const next = new Map(s.users);
+      next.set(id, { id, name, status: 'online' });
+      return { users: next };
+    }),
+  setOffline: (id) =>
+    set((s) => {
+      const next = new Map(s.users);
+      next.delete(id);
+      return { users: next };
+    }),
 }));

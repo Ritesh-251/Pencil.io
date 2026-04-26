@@ -1,52 +1,53 @@
 import { create } from 'zustand';
+import { setMemoryToken } from '../lib/api';
+
+// ─── Shared in-memory token ref (set by api.ts, read by api.ts) ──────────────
+// The access token lives ONLY in memory — never in localStorage.
+// On page reload the api layer silently calls /refresh using the httpOnly cookie.
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface AuthState {
   user: { id: string; username: string; email: string; isVerified?: boolean } | null;
   token: string | null;
   setAuth: (user: any, token: string) => void;
   updateUser: (data: Partial<NonNullable<AuthState['user']>>) => void;
+  clearToken: () => void;
   logout: () => void;
 }
 
-const getInitialAuthState = () => {
-  if (typeof window === 'undefined') {
-    return { user: null, token: null };
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function loadStoredUser(): AuthState['user'] {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem('user');
+  if (!raw || raw === 'undefined' || raw === 'null') return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    localStorage.removeItem('user');
+    return null;
   }
+}
 
-  const storedUser = localStorage.getItem('user');
-  const storedToken = localStorage.getItem('token');
-
-  let user: AuthState['user'] = null;
-  if (storedUser && storedUser !== 'undefined' && storedUser !== 'null') {
-    try {
-      user = JSON.parse(storedUser);
-    } catch {
-      localStorage.removeItem('user');
-    }
-  }
-
-  const token = storedToken && storedToken !== 'undefined' ? storedToken : null;
-  if (storedToken === 'undefined') {
-    localStorage.removeItem('token');
-  }
-
-  return { user, token };
-};
-
-const initialAuthState = getInitialAuthState();
+// ─── Auth Store ───────────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: initialAuthState.user,
-  token: initialAuthState.token,
+  // User metadata is safe in localStorage (no sensitive data).
+  // Token starts null — api.ts will silently refresh from the httpOnly cookie.
+  user: loadStoredUser(),
+  token: null,
+
   setAuth: (user, token) => {
-    if (typeof window === 'undefined' || !token || token === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined' || !token || token === 'undefined') return;
+    // Persist non-sensitive user metadata so the UI loads fast on reload.
     localStorage.setItem('user', JSON.stringify(user));
-    localStorage.setItem('token', token);
-    document.cookie = `has_session=true; path=/; max-age=604800`;
+    // Mark that a session exists so api.ts knows to attempt a silent refresh.
+    document.cookie = `has_session=true; path=/; max-age=604800; SameSite=Lax`;
+    // Token stays in memory only — never touches localStorage.
+    setMemoryToken(token);
     set({ user, token });
   },
+
   updateUser: (data) => {
     const user = get().user;
     if (!user) return;
@@ -54,14 +55,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.setItem('user', JSON.stringify(newUser));
     set({ user: newUser });
   },
+
+  // Called by api.ts when a silent refresh succeeds on page reload.
+  clearToken: () => {
+    set({ token: null });
+  },
+
   logout: () => {
     localStorage.removeItem('user');
-    localStorage.removeItem('token');
+    // Expire the session marker cookie.
     document.cookie = `has_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    setMemoryToken(null);
     set({ user: null, token: null });
     window.location.href = '/auth/signin';
-  }
+  },
 }));
+
+// ─── Connection Store ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
   status: 'connecting' | 'connected' | 'disconnected';
@@ -69,6 +79,7 @@ interface ConnectionState {
   setStatus: (s: 'connecting' | 'connected' | 'disconnected') => void;
   setSyncing: (s: boolean) => void;
 }
+
 export const useConnectionStore = create<ConnectionState>((set) => ({
   status: 'disconnected',
   syncing: false,

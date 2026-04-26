@@ -1,6 +1,7 @@
 import { ConsumeMessage } from "amqplib";
 import { getChannel } from "../infra/rabbitmq";
 import { timelineService } from "../services/timeline.service";
+import { logger } from "../infra/logger";
 
 export async function startIngestConsumer() {
   const channel = getChannel();
@@ -9,7 +10,7 @@ export async function startIngestConsumer() {
   await channel.assertQueue(QUEUE, { durable: true });
   channel.prefetch(1);
 
-  console.log(`AI Service: Ingest Consumer started on queue [${QUEUE}]`);
+  logger.info({ queue: QUEUE }, "AI Service: Ingest Consumer started");
 
   channel.consume(QUEUE, async (msg: ConsumeMessage | null) => {
     if (!msg) return;
@@ -18,14 +19,14 @@ export async function startIngestConsumer() {
       const data = JSON.parse(msg.content.toString());
       const { roomId, includeTranscript } = data;
 
-      console.log(`AI Service: Background Ingestion started for room [${roomId}]`);
+      logger.info({ roomId }, "AI Service: Background Ingestion started");
       
       await timelineService.ingestRoom(roomId, { includeTranscript });
       
-      console.log(`AI Service: Background Ingestion completed for room [${roomId}]`);
+      logger.info({ roomId }, "AI Service: Background Ingestion completed");
       channel.ack(msg);
     } catch (error) {
-      console.error("AI Service: Background Ingestion failed", error);
+      logger.error({ error }, "AI Service: Background Ingestion failed");
       channel.ack(msg);
     }
   });

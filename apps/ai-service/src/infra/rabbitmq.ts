@@ -1,13 +1,11 @@
 import { ConfirmChannel } from "amqplib";
 import { RabbitMQClient } from "@repo/messaging";
+import { logger } from "./logger";
 
 export const rabbitClient = new RabbitMQClient({
   url: process.env.RABBITMQ_URL!,
   serviceName: "ai-service",
-  logger: {
-    info: (msg: string) => console.log(msg),
-    error: (msg: string, meta?: any) => console.error(msg, meta),
-  },
+  logger,
 });
 
 rabbitClient.setTopology(async (channel: ConfirmChannel) => {

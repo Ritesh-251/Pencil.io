@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 import { prisma } from "@repo/db";
+import { logger } from "./infra/logger";
 
 async function checkData() {
   try {
@@ -8,19 +9,19 @@ async function checkData() {
     const chunkCount = await prisma.sessionChunk.count();
     const summaryCount = await prisma.sessionSummary.count();
     
-    console.log(JSON.stringify({
+    logger.info({
       transcriptCount,
       chunkCount,
       summaryCount
-    }, null, 2));
+    }, "Database counts");
     
     const latestTranscript = await prisma.transcriptSegment.findFirst({
       orderBy: { createdAt: 'desc' }
     });
-    console.log("Latest Transcript:", JSON.stringify(latestTranscript, null, 2));
+    logger.info({ latestTranscript }, "Latest Transcript");
     
   } catch (error) {
-    console.error("Error checking data:", error);
+    logger.error({ error }, "Error checking data");
   } finally {
     await prisma.$disconnect();
   }

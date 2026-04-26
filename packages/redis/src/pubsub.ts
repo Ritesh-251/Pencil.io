@@ -1,4 +1,7 @@
 import Redis from "ioredis";
+import { createLogger, Logger } from "@repo/common";
+
+const logger = createLogger("redis-pubsub");
 
 type WSRedisEvent = {
   type: string;
@@ -31,23 +34,23 @@ export class RedisPubSub {
     this.sub = new Redis(redisUrl, { retryStrategy });
 
     this.pub.on("connect", () => {
-      console.log("[RedisPubSub] Publisher connected");
+      logger.info({ serverId: this.serverId }, "Publisher connected");
       this.healthy = true
     });
 
     this.sub.on("connect", () => {
-      console.log("[RedisPubSub] Subscriber connected");
+      logger.info({ serverId: this.serverId }, "Subscriber connected");
       this.healthy = true
     });
 
     this.pub.on("error", (err) => {
       this.healthy = false
-      console.error("[RedisPubSub] Publisher error", err);
+      logger.error({ err, serverId: this.serverId }, "Publisher error");
     });
 
     this.sub.on("error", (err) => {
       this.healthy = false
-      console.error("[RedisPubSub] Subscriber error", err);
+      logger.error({ err, serverId: this.serverId }, "Subscriber error");
     });
 
     await this.sub.subscribe(RedisPubSub.CHANNEL);
@@ -70,10 +73,11 @@ export class RedisPubSub {
     try {
       await this.pub.publish(RedisPubSub.CHANNEL, JSON.stringify(fullEvent));
     } catch (err) {
-      console.error("[RedisPubSub] publish failed", {
-        error: err,
+      logger.error({
+        err,
         event: fullEvent,
-      });
+        serverId: this.serverId
+      }, "publish failed");
     }
   }
 
@@ -110,7 +114,7 @@ export class RedisPubSub {
       try {
         parsed = JSON.parse(message);
       } catch {
-        console.warn("[RedisPubSub] Invalid JSON:", message);
+        logger.warn({ message, serverId: this.serverId }, "Invalid JSON");
         return;
       }
 
@@ -120,7 +124,7 @@ export class RedisPubSub {
         typeof parsed.roomId !== "string" ||
         typeof parsed.origin !== "string"
       ) {
-        console.warn("[RedisPubSub] Malformed event:", parsed);
+        logger.warn({ parsed, serverId: this.serverId }, "Malformed event");
         return;
       }
 

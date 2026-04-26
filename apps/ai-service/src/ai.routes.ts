@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { aiController } from "./controllers/ai.controller";
+import { logger } from "./infra/logger";
 
 const router: Router = Router();
 
@@ -13,7 +14,7 @@ router.post("/:roomId/summary", aiController.summary.bind(aiController));
  * Though validation is now handled by Zod in index.ts
  */
 export function validateAiEnvironment() {
-  console.log("AI environment validated via Zod");
+  logger.info("AI environment validated via Zod");
 }
 
 export default router;

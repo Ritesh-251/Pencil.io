@@ -13,200 +13,34 @@ import {
 import { useParams } from 'next/navigation';
 import { WSClient } from '@/lib/ws';
 import { useCanvasStore } from '@/store/canvas.store';
-
-const TOOLS = [
-  { id: 'select', label: 'Select', symbol: 'Sel' },
-  { id: 'draw', label: 'Pen', symbol: 'Pen' },
-  { id: 'erase', label: 'Erase', symbol: 'Ers' },
-  { id: 'arrow', label: 'Arrow', symbol: 'Arr' },
-  { id: 'rectangle', label: 'Rectangle', symbol: 'Rect' },
-  { id: 'ellipse', label: 'Ellipse', symbol: 'Circ' },
-  { id: 'text', label: 'Text', symbol: 'Text' },
-  { id: 'sticky', label: 'Sticky', symbol: 'Note' },
-  { id: 'image', label: 'Image', symbol: 'Img' },
-] as const;
-
-type CanvasTool = 'draw' | 'erase' | 'arrow' | 'rectangle' | 'ellipse' | 'text' | 'select' | 'sticky' | 'image';
-
-type DraftState = {
-  objectId: string;
-  tool: CanvasTool;
-  startX: number;
-  startY: number;
-  lastEmitAt?: number;
-};
-
-type DragState = {
-  objectId: string;
-  pointerStartX: number;
-  pointerStartY: number;
-  objectStart: Record<string, any>;
-  mode?: 'move' | 'resize';
-  handle?:
-    | 'nw'
-    | 'n'
-    | 'ne'
-    | 'e'
-    | 'se'
-    | 's'
-    | 'sw'
-    | 'w'
-    | 'arrow-start'
-    | 'arrow-end';
-  lastEmitAt?: number;
-};
-
-type GroupDragState = {
-  handle: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
-  pointerStartX: number;
-  pointerStartY: number;
-  snapshots: Array<{ id: string; obj: Record<string, any> }>;
-  unionStart: { left: number; top: number; right: number; bottom: number; width: number; height: number };
-  lastEmitAt?: number;
-};
-
-type TextDraft = {
-  x: number;
-  y: number;
-  value: string;
-  fontSize: number;
-  fontFamily: string;
-};
-
-type ViewState = {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-};
-
-type SelectionBox = {
-  startX: number;
-  startY: number;
-  endX: number;
-  endY: number;
-};
-
-type ObjectEditDraft = {
-  objectId: string;
-  kind: 'text' | 'sticky';
-  x: number;
-  y: number;
-  value: string;
-  fontSize?: number;
-};
-
-type HistoryEntry = {
-  objectId: string;
-  before: Record<string, any> | null;
-  after: Record<string, any> | null;
-  groupId: string;
-  createdAt: number;
-};
-
-const CANVAS_EMIT_INTERVAL_MS = 40;
-const GROUP_EMIT_INTERVAL_MS = 250; // slower throttle for group drag to avoid rate limiting
-const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 3;
-const ERASER_RADIUS = 14;
-const MIN_POINT_DISTANCE = 3; // px — minimum distance between consecutive stroke points
-const HANDLE_SIZE = 10;
-const TEXT_SIZE_OPTIONS = [16, 22, 30] as const;
-
-const FONT_OPTIONS = [
-  { id: 'sketch', label: 'Sketch', family: '"Virgil", "Comic Sans MS", "Bradley Hand", cursive' },
-  { id: 'sans',   label: 'Sans',   family: 'Inter, system-ui, -apple-system, sans-serif' },
-  { id: 'serif',  label: 'Serif',  family: 'Georgia, "Times New Roman", "Palatino Linotype", serif' },
-  { id: 'mono',   label: 'Mono',   family: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace' },
-] as const;
-
-const DEFAULT_FONT_FAMILY = FONT_OPTIONS[0].family;
-
-const STROKE_STYLE_OPTIONS = [
-  { id: 'sharp', label: 'Sharp' },
-  { id: 'smooth', label: 'Smooth' },
-  { id: 'fluid', label: 'Fluid' },
-] as const;
-
-type StrokeStyle = 'sharp' | 'smooth' | 'fluid';
-
-function measureTextBounds(value: string, fontSize: number, fontFamily?: string) {
-  // Use an offscreen canvas for accurate text measurement across all fonts
-  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
-  const ctx = canvas?.getContext('2d');
-  const lines = value.split(/\n/g);
-  const lineHeight = Math.round(fontSize * 1.24);
-
-  let maxWidth = 60;
-  if (ctx) {
-    ctx.font = `${fontSize}px ${fontFamily || '"Virgil", "Comic Sans MS", cursive'}`;
-    for (const line of lines) {
-      maxWidth = Math.max(maxWidth, Math.ceil(ctx.measureText(line).width));
-    }
-  } else {
-    // Fallback: character-based estimate
-    const longest = lines.reduce((max, line) => Math.max(max, line.length), 0);
-    maxWidth = Math.max(60, Math.round(longest * fontSize * 0.62));
-  }
-
-  const height = Math.max(
-    Math.round(fontSize * 1.4),
-    Math.round(lines.length * lineHeight + 4),
-  );
-  return { width: maxWidth + 4, height };
-}
-
-function drawRoundedRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number,
-) {
-  const r = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + width - r, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
-  ctx.lineTo(x + width, y + height - r);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
-  ctx.lineTo(x + r, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function getUploadApiBase() {
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3003';
-  if (wsUrl.startsWith('wss://')) return wsUrl.replace('wss://', 'https://');
-  if (wsUrl.startsWith('ws://')) return wsUrl.replace('ws://', 'http://');
-  return wsUrl;
-}
-
-function canLoadImageUrl(url: string) {
-  return new Promise<boolean>((resolve) => {
-    const img = new Image();
-    let settled = false;
-
-    const finish = (ok: boolean) => {
-      if (settled) return;
-      settled = true;
-      resolve(ok);
-    };
-
-    const timer = setTimeout(() => finish(false), 4000);
-    img.onload = () => {
-      clearTimeout(timer);
-      finish(true);
-    };
-    img.onerror = () => {
-      clearTimeout(timer);
-      finish(false);
-    };
-    img.src = url;
-  });
-}
+import {
+  TOOLS,
+  type CanvasTool,
+  type DraftState,
+  type DragState,
+  type GroupDragState,
+  type TextDraft,
+  type ViewState,
+  type SelectionBox,
+  type ObjectEditDraft,
+  type HistoryEntry,
+  CANVAS_EMIT_INTERVAL_MS,
+  GROUP_EMIT_INTERVAL_MS,
+  MIN_ZOOM,
+  MAX_ZOOM,
+  ERASER_RADIUS,
+  MIN_POINT_DISTANCE,
+  HANDLE_SIZE,
+  TEXT_SIZE_OPTIONS,
+  FONT_OPTIONS,
+  DEFAULT_FONT_FAMILY,
+  STROKE_STYLE_OPTIONS,
+  type StrokeStyle,
+  measureTextBounds,
+  drawRoundedRect,
+  getUploadApiBase,
+  canLoadImageUrl,
+} from './canvasPane.shared';
 
 export const CanvasPane = () => {
   const params = useParams<{ roomId: string }>();
@@ -227,6 +61,10 @@ export const CanvasPane = () => {
   const applyUpdate = useCanvasStore((s) => s.applyUpdate);
   const replaceObjects = useCanvasStore((s) => s.replaceObjects);
 
+  // Performance Optimization: Active Stroke Ref
+  const activeStrokeRef = useRef<{ points: { x: number; y: number }[]; color: string; width: number } | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+
   const isDrawing = useRef(false);
   const isPanningRef = useRef(false);
   const panStartRef = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
@@ -245,6 +83,7 @@ export const CanvasPane = () => {
 
   const [activeTool, setActiveTool] = useState<CanvasTool>('draw');
   const [strokeColor, setStrokeColor] = useState('#0d5bd7');
+  const [fillColor, setFillColor] = useState('transparent');
   const [brushSize, setBrushSize] = useState(3);
   const [textSize, setTextSize] = useState<number>(TEXT_SIZE_OPTIONS[1]);
   const [textFont, setTextFont] = useState<string>(DEFAULT_FONT_FAMILY);
@@ -454,7 +293,16 @@ export const CanvasPane = () => {
 
   const replayRecent = async () => {
     const history = [...historyUndoRef.current].slice(-50);
-    if (history.length === 0) return;
+    if (history.length === 0) {
+      const activeRoomId = getActiveRoomId();
+      if (!activeRoomId) return;
+      WSClient.getInstance().send('canvas:replay', {
+        roomId: activeRoomId,
+        fromTime: 0,
+        toTimestamp: Date.now(),
+      });
+      return;
+    }
 
     for (let i = history.length - 1; i >= 0; i -= 1) {
       const entry = history[i];
@@ -705,6 +553,10 @@ export const CanvasPane = () => {
         0,
         Math.PI * 2,
       );
+      if (obj.fill && obj.fill !== 'transparent') {
+        ctx.fillStyle = obj.fill;
+        ctx.fill();
+      }
       ctx.stroke();
       return;
     }
@@ -1377,9 +1229,39 @@ export const CanvasPane = () => {
       });
     });
 
+    const offReplay = ws.on('canvas:replay', (payload) => {
+      const entries = Array.isArray(payload?.events) ? payload.events : [];
+      if (entries.length === 0) return;
+
+      const nextObjects = new Map<string, any>();
+      entries.forEach((entry: any) => {
+        if (!Array.isArray(entry) || entry.length < 2) return;
+        const objectId = String(entry[0] || '').trim();
+        const crdt = entry[1] as any;
+        if (!objectId) return;
+
+        const rawProps = crdt?.props ?? crdt ?? {};
+        const normalized = {
+          id: objectId,
+          ...rawProps,
+          type: rawProps?.type,
+        };
+
+        nextObjects.set(objectId, {
+          ...normalized,
+          _hlc: {},
+        });
+      });
+
+      if (nextObjects.size > 0) {
+        replaceObjects(nextObjects);
+      }
+    });
+
     return () => {
       offObject();
       offLoad();
+      offReplay();
     };
   }, [replaceObjects, upsertObject]);
 
@@ -1518,7 +1400,102 @@ export const CanvasPane = () => {
       ctx.strokeRect(left, top, width, height);
       ctx.restore();
     }
+
+    // Performance Optimization: Render active stroke from ref for 60fps feedback
+    if (activeStrokeRef.current && isDrawing.current) {
+      drawObject(ctx, {
+        type: 'stroke',
+        points: activeStrokeRef.current.points,
+        color: activeStrokeRef.current.color,
+        width: activeStrokeRef.current.width,
+        strokeStyle: 'smooth'
+      });
+    }
   }, [caretVisible, drawObject, drawSelectionOverlay, drawableObjects, objects, selectionBox, strokeColor, textDraft, view]);
+
+  // High-performance animation loop for fluid drawing
+  useEffect(() => {
+    const loop = () => {
+      if (isDrawing.current && activeStrokeRef.current) {
+        drawAllRef.current?.();
+      }
+      rafIdRef.current = requestAnimationFrame(loop);
+    };
+    rafIdRef.current = requestAnimationFrame(loop);
+    return () => {
+      if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, []);
+
+  // SYNC: Update toolkit colors when a single object is selected
+  useEffect(() => {
+    const ids = selectedObjectIds;
+    if (ids.length === 1) {
+      const obj = objects.get(ids[0]!);
+      if (obj && !obj.deleted) {
+        if (obj.color && obj.color !== strokeColor) setStrokeColor(obj.color);
+        if (obj.fill && obj.fill !== fillColor) setFillColor(obj.fill);
+        const objWidth = obj.width ?? obj.strokeWidth;
+        if (objWidth !== undefined && objWidth !== brushSize) setBrushSize(objWidth);
+      }
+    }
+    // We only want to sync when the SELECTION changes, not when every object property changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedObjectIds]);
+
+  // UPDATE: Change properties of selected objects when toolkit values change
+  useEffect(() => {
+    const ids = selectedObjectIds;
+    if (ids.length === 0) return;
+
+    const groupId = nextHistoryGroupId();
+    let changed = false;
+
+    ids.forEach((id) => {
+      const obj = objects.get(id);
+      if (!obj || obj.deleted) return;
+
+      const before = cloneHistoryObject(obj);
+      let updated = false;
+
+      // Update stroke color
+      if (obj.color !== undefined && obj.color !== strokeColor) {
+        obj.color = strokeColor;
+        updated = true;
+      }
+
+      // Update fill color
+      if (obj.fill !== undefined && obj.fill !== fillColor) {
+        obj.fill = fillColor;
+        updated = true;
+      }
+
+      // Update brush size (width or strokeWidth)
+      if (obj.width !== undefined && obj.width !== brushSize) {
+        obj.width = brushSize;
+        updated = true;
+      } else if (obj.strokeWidth !== undefined && obj.strokeWidth !== brushSize) {
+        obj.strokeWidth = brushSize;
+        updated = true;
+      }
+
+      if (updated) {
+        changed = true;
+        upsertObject(id, obj);
+        sendCanvasEvent(id, 'UPDATE_OBJECT', obj.type || 'shape', obj);
+        recordHistory({
+          objectId: id,
+          before,
+          after: cloneHistoryObject(obj),
+          groupId,
+        });
+      }
+    });
+
+    if (changed) {
+      setHistoryVersion((v) => v + 1);
+    }
+  }, [strokeColor, fillColor, brushSize]);
 
   const zoomAtPoint = useCallback((screenX: number, screenY: number, factor: number) => {
     setView((prev) => {
@@ -1651,6 +1628,7 @@ export const CanvasPane = () => {
         lastEmitAt: 0,
       };
       isDrawing.current = true;
+      drawGroupIdRef.current = nextHistoryGroupId();
     };
 
     if (activeTool !== 'erase' && activeTool !== 'image') {
@@ -1681,6 +1659,7 @@ export const CanvasPane = () => {
               lastEmitAt: 0,
             };
             isDrawing.current = true;
+            drawGroupIdRef.current = nextHistoryGroupId();
             return;
           }
         }
@@ -1702,6 +1681,7 @@ export const CanvasPane = () => {
           lastEmitAt: 0,
         };
         isDrawing.current = true;
+        drawGroupIdRef.current = nextHistoryGroupId();
         return;
       }
 
@@ -1739,6 +1719,7 @@ export const CanvasPane = () => {
           // Mark as group-move by setting handle to undefined-ish — we'll detect via a flag
           (groupDragRef.current as any)._isGroupMove = true;
           isDrawing.current = true;
+          drawGroupIdRef.current = nextHistoryGroupId();
           return;
         }
       }
@@ -1811,9 +1792,16 @@ export const CanvasPane = () => {
         ],
       };
       draftRef.current = { objectId, tool: 'arrow', startX: x, startY: y, lastEmitAt: 0 };
+      const groupId = nextHistoryGroupId();
+      drawGroupIdRef.current = groupId;
       upsertObject(objectId, props);
       sendCanvasEvent(objectId, 'CREATE_OBJECT', 'arrow', props);
-      drawGroupIdRef.current = nextHistoryGroupId();
+      recordHistory({
+        objectId,
+        before: null,
+        after: cloneHistoryObject(props),
+        groupId,
+      });
       return;
     }
 
@@ -1831,12 +1819,19 @@ export const CanvasPane = () => {
         width: 1,
         height: 1,
         color: strokeColor,
-        fill: 'transparent',
+        fill: fillColor,
         strokeWidth: brushSize,
       };
+      const groupId = nextHistoryGroupId();
+      drawGroupIdRef.current = groupId;
       upsertObject(objectId, props);
       sendCanvasEvent(objectId, 'CREATE_OBJECT', shapeType, props);
-      drawGroupIdRef.current = nextHistoryGroupId();
+      recordHistory({
+        objectId,
+        before: null,
+        after: cloneHistoryObject(props),
+        groupId,
+      });
       return;
     }
 
@@ -1844,6 +1839,13 @@ export const CanvasPane = () => {
     e.currentTarget.setPointerCapture(e.pointerId);
     drawGroupIdRef.current = nextHistoryGroupId();
     draftRef.current = { objectId, tool: 'draw', startX: x, startY: y, lastEmitAt: 0 };
+    
+    // Performance Optimization: Initialize active stroke ref
+    activeStrokeRef.current = {
+      points: [{ x, y }],
+      color: strokeColor,
+      width: brushSize
+    };
 
     // Create ONE stroke object immediately — points accumulate during pointer move
     const initProps = {
@@ -1858,6 +1860,12 @@ export const CanvasPane = () => {
     };
     upsertObject(objectId, initProps);
     sendCanvasEvent(objectId, 'CREATE_OBJECT', 'stroke', initProps);
+    recordHistory({
+      objectId,
+      before: null,
+      after: cloneHistoryObject(initProps),
+      groupId: drawGroupIdRef.current,
+    });
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -1916,8 +1924,17 @@ export const CanvasPane = () => {
         if (now - (gd.lastEmitAt ?? 0) >= GROUP_EMIT_INTERVAL_MS) {
           groupDragRef.current = { ...gd, lastEmitAt: now };
           gd.snapshots.forEach(({ id }) => {
+            const before = cloneHistoryObject(objects.get(id));
             const latest = objects.get(id);
-            if (latest) sendCanvasEvent(id, 'UPDATE_OBJECT', latest.type || 'shape', latest);
+            if (latest) {
+              sendCanvasEvent(id, 'UPDATE_OBJECT', latest.type || 'shape', latest);
+              recordHistory({
+                objectId: id,
+                before,
+                after: cloneHistoryObject(latest),
+                groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+              });
+            }
           });
         }
         return;
@@ -1949,8 +1966,16 @@ export const CanvasPane = () => {
 
       const now = Date.now();
       if (now - (drag.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+        const before = cloneHistoryObject(objects.get(drag.objectId));
         dragRef.current = { ...drag, lastEmitAt: now };
+        upsertObject(drag.objectId, nextObject);
         sendCanvasEvent(drag.objectId, 'UPDATE_OBJECT', nextObject.type || 'shape', nextObject);
+        recordHistory({
+          objectId: drag.objectId,
+          before,
+          after: cloneHistoryObject(nextObject),
+          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+        });
       }
       return;
     }
@@ -1959,32 +1984,35 @@ export const CanvasPane = () => {
     if (!draft) return;
 
     const now = Date.now();
-    if (now - (draft.lastEmitAt ?? 0) < CANVAS_EMIT_INTERVAL_MS) return;
-
     if (draft.tool === 'draw') {
-      // Append the new point only if it's far enough from the last one (thinning)
-      const existing = objects.get(draft.objectId);
-      const pts = Array.isArray(existing?.points) ? [...existing.points] : [{ x: draft.startX, y: draft.startY }];
-      const lastPt = pts[pts.length - 1];
+      const active = activeStrokeRef.current;
+      if (!active) return;
+      const lastPt = active.points[active.points.length - 1];
       const distSq = lastPt ? (x - lastPt.x) ** 2 + (y - lastPt.y) ** 2 : Infinity;
-      if (distSq < MIN_POINT_DISTANCE * MIN_POINT_DISTANCE) return; // too close — skip
-      pts.push({ x, y });
+      if (distSq < 9) return; 
+      active.points.push({ x, y });
 
-      const props = {
-        ...existing,
-        id: draft.objectId,
-        type: 'stroke',
-        color: strokeColor,
-        width: brushSize,
-        strokeStyle: existing?.strokeStyle || strokeStyle,
-        points: pts,
-      };
-
-      draftRef.current = { ...draft, lastEmitAt: now };
-      upsertObject(draft.objectId, props);
-      sendCanvasEvent(draft.objectId, 'UPDATE_OBJECT', 'stroke', props);
+      if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+        const existing = objects.get(draft.objectId);
+        const props = {
+          ...existing, id: draft.objectId, type: 'stroke',
+          color: strokeColor, width: brushSize,
+          strokeStyle: existing?.strokeStyle || strokeStyle,
+          points: [...active.points],
+        };
+        const before = cloneHistoryObject(existing);
+        draftRef.current = { ...draft, lastEmitAt: now };
+        upsertObject(draft.objectId, props);
+        sendCanvasEvent(draft.objectId, 'UPDATE_OBJECT', 'stroke', props);
+        recordHistory({
+          objectId: draft.objectId, before, after: cloneHistoryObject(props),
+          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+        });
+      }
       return;
     }
+
+    if (now - (draft.lastEmitAt ?? 0) < CANVAS_EMIT_INTERVAL_MS) return;
 
     if (draft.tool === 'arrow') {
       const props = {
@@ -1997,9 +2025,16 @@ export const CanvasPane = () => {
           { x, y },
         ],
       };
+      const before = cloneHistoryObject(objects.get(draft.objectId));
       draftRef.current = { ...draft, lastEmitAt: now };
       upsertObject(draft.objectId, props);
       sendCanvasEvent(draft.objectId, 'UPDATE_OBJECT', 'arrow', props);
+      recordHistory({
+        objectId: draft.objectId,
+        before,
+        after: cloneHistoryObject(props),
+        groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+      });
       return;
     }
 
@@ -2017,13 +2052,20 @@ export const CanvasPane = () => {
       width: nextWidth,
       height: nextHeight,
       color: strokeColor,
-      fill: 'transparent',
+      fill: fillColor,
       strokeWidth: brushSize,
     };
 
+    const before = cloneHistoryObject(objects.get(draft.objectId));
     draftRef.current = { ...draft, lastEmitAt: now };
     upsertObject(draft.objectId, props);
     sendCanvasEvent(draft.objectId, 'UPDATE_OBJECT', shapeType, props);
+    recordHistory({
+      objectId: draft.objectId,
+      before,
+      after: cloneHistoryObject(props),
+      groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+    });
   };
 
   const onPointerUp = () => {
@@ -2076,32 +2118,7 @@ export const CanvasPane = () => {
       setSelectionBox(null);
     }
 
-    if (draftRef.current && draftRef.current.tool === 'draw') {
-      const objectId = draftRef.current.objectId;
-      const latest = objects.get(objectId);
-      if (latest) {
-        recordHistory({
-          objectId,
-          before: null,
-          after: cloneHistoryObject(latest),
-          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
-        });
-      }
-    }
-
-    if (draftRef.current && (draftRef.current.tool === 'arrow' || draftRef.current.tool === 'rectangle' || draftRef.current.tool === 'ellipse')) {
-      const objectId = draftRef.current.objectId;
-      const latest = objects.get(objectId);
-      if (latest) {
-        recordHistory({
-          objectId,
-          before: null,
-          after: cloneHistoryObject(latest),
-          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
-        });
-      }
-    }
-
+    // Redundant records removed as they are now captured progressively in onPointerDown/Move
     isDrawing.current = false;
     eraseVisitedRef.current.clear();
     eraseLastPointRef.current = null;
@@ -2196,6 +2213,7 @@ export const CanvasPane = () => {
         />
 
         <canvas
+          id="main-drawing-canvas"
           ref={canvasRef}
           className="block h-full w-full"
           style={{ touchAction: 'none' }}
@@ -2280,63 +2298,44 @@ export const CanvasPane = () => {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            disabled={selectedObjectIds.length === 0}
-            onClick={() => {
-              if (selectedObjectIds.length === 0) return;
-              const groupId = nextHistoryGroupId();
-              selectedObjectIds.forEach((id) => {
-                deleteObjectById(id, groupId);
-              });
-              setSelectedObjects([]);
-            }}
-          >
-            Delete Selected ({selectedObjectIds.length})
-          </button>
-
-          <div className="grid grid-cols-3 gap-1.5">
-            <button type="button" className="btn btn-outline btn-sm" onClick={undo} disabled={!canUndo}>
-              Undo
-            </button>
-            <button type="button" className="btn btn-outline btn-sm" onClick={redo} disabled={!canRedo}>
-              Redo
-            </button>
-            <button type="button" className="btn btn-outline btn-sm" onClick={() => void replayRecent()} disabled={!canUndo}>
-              Replay
-            </button>
-          </div>
-
-          <div className="mt-1 flex items-center justify-between rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.75)] px-2 py-1 text-[0.72rem]">
-            <span>Zoom</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs"
-                onClick={() => zoomAtPoint((containerRef.current?.clientWidth || 0) / 2, (containerRef.current?.clientHeight || 0) / 2, 0.9)}
-              >
-                -
-              </button>
-              <span className="min-w-[40px] text-center">{Math.round(view.scale * 100)}%</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs"
-                onClick={() => zoomAtPoint((containerRef.current?.clientWidth || 0) / 2, (containerRef.current?.clientHeight || 0) / 2, 1.1)}
-              >
-                +
-              </button>
-            </div>
-          </div>
-
           <div className="mt-1 grid gap-1.5">
-            <label className="text-[0.72rem] font-semibold text-[var(--ink-soft)]">Color</label>
+            {/* Stroke Color */}
+          <div className="flex flex-col gap-1.5 border-r border-slate-200/60 pr-3 mr-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stroke</span>
             <input
               type="color"
               value={strokeColor}
               onChange={(e) => setStrokeColor(e.target.value)}
-              className="h-8 w-full cursor-pointer rounded-md border border-[rgba(26,26,26,.2)] bg-transparent"
+              className="h-8 w-8 cursor-pointer overflow-hidden rounded-lg border-2 border-slate-100 shadow-sm transition-transform hover:scale-110"
+              title="Stroke Color"
             />
+          </div>
+
+          {/* Fill Color */}
+          <div className="flex flex-col gap-1.5 border-r border-slate-200/60 pr-3 mr-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Background</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={fillColor === 'transparent' ? '#ffffff' : fillColor}
+                onChange={(e) => setFillColor(e.target.value)}
+                disabled={fillColor === 'transparent'}
+                className={`h-8 w-8 cursor-pointer overflow-hidden rounded-lg border-2 border-slate-100 shadow-sm transition-transform hover:scale-110 ${fillColor === 'transparent' ? 'opacity-30 grayscale' : ''}`}
+                title="Fill Color"
+              />
+              <button
+                onClick={() => setFillColor(fillColor === 'transparent' ? '#ffffff' : 'transparent')}
+                className={`flex h-8 items-center justify-center rounded-lg border-2 px-2 text-[10px] font-bold transition-all ${
+                  fillColor === 'transparent'
+                    ? 'border-blue-500 bg-blue-50 text-blue-600 shadow-inner'
+                    : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                }`}
+                title="Toggle Transparency"
+              >
+                {fillColor === 'transparent' ? 'SOLID' : 'NONE'}
+              </button>
+            </div>
+          </div>
 
             <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">Brush {brushSize}px</label>
             <input
@@ -2402,8 +2401,59 @@ export const CanvasPane = () => {
               </div>
             )}
           </div>
+
+          <div className="mt-2 flex flex-col gap-2 border-t border-[rgba(26,26,26,.1)] pt-2">
+            <button
+              type="button"
+              className="btn btn-outline btn-sm w-full"
+              disabled={selectedObjectIds.length === 0}
+              onClick={() => {
+                if (selectedObjectIds.length === 0) return;
+                const groupId = nextHistoryGroupId();
+                selectedObjectIds.forEach((id) => {
+                  deleteObjectById(id, groupId);
+                });
+                setSelectedObjects([]);
+              }}
+            >
+              Delete Selected ({selectedObjectIds.length})
+            </button>
+
+            <div className="grid grid-cols-3 gap-1.5">
+              <button type="button" className="btn btn-outline btn-sm" onClick={undo} disabled={!canUndo}>
+                Undo
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={redo} disabled={!canRedo}>
+                Redo
+              </button>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => void replayRecent()} disabled={!canUndo}>
+                Replay
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.75)] px-2 py-1 text-[0.72rem]">
+              <span>Zoom</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => zoomAtPoint((containerRef.current?.clientWidth || 0) / 2, (containerRef.current?.clientHeight || 0) / 2, 0.9)}
+                >
+                  -
+                </button>
+                <span className="min-w-[40px] text-center">{Math.round(view.scale * 100)}%</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => zoomAtPoint((containerRef.current?.clientWidth || 0) / 2, (containerRef.current?.clientHeight || 0) / 2, 1.1)}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+
 
       {editingObject && (
         <div
@@ -2450,6 +2500,7 @@ export const CanvasPane = () => {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 };

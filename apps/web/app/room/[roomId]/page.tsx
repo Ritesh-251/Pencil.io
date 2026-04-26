@@ -3,73 +3,25 @@
 import { CanvasPane } from '@/components/workspace/CanvasPane';
 import { ChatPanel } from '@/components/workspace/ChatPanel';
 import { MediaPanel } from '@/components/workspace/MediaPanel';
+import { TranscriptPanel } from '@/components/workspace/TranscriptPanel';
+import { AIPanel } from '@/components/workspace/AIPanel';
+import { JoinRequestPopup } from '@/components/workspace/JoinRequestPopup';
 import { WSClient } from '@/lib/ws';
 import { api, ApiClientError, getAccessToken } from '@/lib/api';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthStore, useConnectionStore } from '@/store/auth.store';
 import { usePresenceStore } from '@/store/room.store';
-
-// ─── Layout helpers ───────────────────────────────────────────────────────────
-
-const PANEL_KEYS = {
-  canvas: 'pencil:panel:canvas',
-  chat:   'pencil:panel:chat',
-  media:  'pencil:panel:media',
-} as const;
-
-function loadBool(key: string, fallback: boolean) {
-  try {
-    const v = localStorage.getItem(key);
-    return v === null ? fallback : v === 'true';
-  } catch { return fallback; }
-}
-function saveBool(key: string, val: boolean) {
-  try { localStorage.setItem(key, String(val)); } catch { /* noop */ }
-}
-
-const avatarPalette = ['#7c6af7', '#f97316', '#22c55e', '#06b6d4', '#f43f5e', '#eab308'];
-
-// ─── Icon helpers ─────────────────────────────────────────────────────────────
-
-const IconCanvas = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="3" width="18" height="18" rx="2" />
-    <path d="M3 9h18M9 21V9" />
-  </svg>
-);
-
-const IconChat = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-  </svg>
-);
-
-const IconMedia = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polygon points="23 7 16 12 23 17 23 7" />
-    <rect x="1" y="5" width="15" height="14" rx="2" />
-  </svg>
-);
-
-const IconShare = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-    <polyline points="16 6 12 2 8 6" />
-    <line x1="12" y1="2" x2="12" y2="15" />
-  </svg>
-);
-
-const IconRefresh = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <polyline points="23 4 23 10 17 10" />
-    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-  </svg>
-);
+import {
+  PANEL_KEYS,
+  loadBool,
+  saveBool,
+  avatarPalette,
+  IconCanvas,
+  IconChat,
+  IconMedia,
+  IconShare,
+  IconRefresh,
+} from '@/components/workspace/roomPage.ui';
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -91,9 +43,18 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const [isEditingRoomName, setIsEditingRoomName] = useState(false);
   const [draftRoomName, setDraftRoomName] = useState('');
   const [roomNameSaving, setRoomNameSaving] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const membershipInFlightRef = useRef(false);
   const wsAuthRetryRef = useRef(false);
+
+  const [isWaiting, setIsWaiting] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const stopSyncing = useCallback(() => {
     setSyncing(false);
@@ -163,8 +124,19 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         if (!active) return;
         const rooms = Array.isArray(res?.rooms) ? res.rooms : [];
         const match = rooms.find((r: any) => (r?.roomId ?? r?.id) === roomId);
-        const name = typeof match?.name === 'string' ? match.name.trim() : '';
-        setRoomName(name || null);
+        
+        if (match) {
+          const name = typeof match?.name === 'string' ? match.name.trim() : '';
+          setRoomName(name || null);
+          
+          const isCreator = match.role === 'ADMIN'; 
+          setIsHost(isCreator);
+
+          if (isCreator) {
+            const reqs = await api.get(`/api/v1/rooms/${roomId}/join-requests`);
+            setPendingRequests(reqs.requests || []);
+          }
+        }
       } catch {
         if (!active) return;
         setRoomName(null);
@@ -189,6 +161,10 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
       } catch (error: any) {
         if (error instanceof ApiClientError && error.status === 401) {
           window.location.href = '/auth/signin';
+          return false;
+        }
+        if (error instanceof ApiClientError && error.status === 403 && error.payload?.approvalRequired) {
+          setIsWaiting(true);
           return false;
         }
         setCanvasError(error?.message || 'Could not join room.');
@@ -218,6 +194,21 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
         setOnline(targetId, name);
       } else if (state === 'offline') {
         setOffline(targetId);
+      }
+    });
+
+    const offJoinEvents = ws.on('room:event', (payload: any) => {
+      if (payload.type === 'JOIN_REQUEST') {
+        if (isHost) {
+          setPendingRequests(prev => [...prev, { id: payload.requestId, userEmail: payload.userEmail, userId: payload.userId }]);
+        }
+      } else if (payload.type === 'JOIN_REQUEST_APPROVED') {
+        if (payload.userId === user?.id) {
+          setIsWaiting(false);
+          void ensureMembership().then(joined => {
+            if (joined) sendInitialRoomHandshake();
+          });
+        }
       }
     });
 
@@ -357,6 +348,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const [showCanvas, setShowCanvas] = useState(true);
   const [showChat,   setShowChat]   = useState(true);
   const [showMedia,  setShowMedia]  = useState(true);
+  const [insightTab, setInsightTab] = useState<'chat' | 'transcript' | 'ai'>('chat');
 
   useEffect(() => {
     const nextCanvas = loadBool(PANEL_KEYS.canvas, true);
@@ -398,8 +390,45 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
   const canvasOnly   = showCanvas && !showSidebar;
   const mediaChatOnly = !showCanvas && showMedia && showChat;
 
+  if (isWaiting) {
+    return (
+      <div className="app-shell flex h-screen flex-col items-center justify-center bg-[#fffaf1] p-6 text-center">
+        <div className="glass flex max-w-md flex-col items-center gap-6 rounded-[32px] p-10 shadow-2xl">
+          <div className="relative">
+            <div className="absolute inset-0 animate-ping rounded-full bg-[rgba(13,91,215,0.1)]" />
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-[rgba(13,91,215,1)] text-white shadow-lg">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-6-6H4a2 2 0 0 0-2 2v16z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold tracking-tight text-[#1a1a1a]">Waiting for Host</h1>
+            <p className="text-[0.95rem] leading-relaxed text-[#666]">
+              This room is private. We've sent a knock to the host to let you in. Please stay on this page.
+            </p>
+          </div>
+          <div className="h-1 w-full overflow-hidden rounded-full bg-[rgba(0,0,0,0.05)]">
+            <div className="h-full w-1/3 animate-[progress_2s_ease-in-out_infinite] rounded-full bg-[rgba(13,91,215,1)]" />
+          </div>
+        </div>
+        <style jsx global>{`
+          @keyframes progress {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(300%); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell ambient-noise flex h-screen flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-3">
+      {isHost && (
+        <JoinRequestPopup 
+          roomId={roomId} 
+          requests={pendingRequests} 
+          onHandled={(id) => setPendingRequests(prev => prev.filter(r => r.id !== id))} 
+        />
+      )}
 
       {/* ── Disconnected banner ───────────────────────────────────────────── */}
       {status === 'disconnected' && (
@@ -486,19 +515,23 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
           )}
 
           {/* Avatar stack */}
-          <div className="flex items-center -space-x-1.5 hidden sm:flex">
-            {presence.slice(0, 3).map((p) => (
-              <div key={p.id}
-                className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[var(--bg-surface)] text-[0.68rem] font-bold text-white shadow-sm"
-                style={{ backgroundColor: p.color }} title={p.name}>
-                {p.initials}
-                <span className="absolute -bottom-px -right-px h-2 w-2 rounded-full border border-[var(--bg-base)] bg-[#2f6340]" />
-              </div>
-            ))}
-            {presence.length > 3 && (
-              <div className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[var(--bg-surface)] bg-[#d6ccbb] text-[0.65rem] font-bold text-[#1a1a1a] shadow-sm">
-                +{presence.length - 3}
-              </div>
+          <div className="hidden items-center -space-x-1.5 sm:flex">
+            {isMounted && (
+              <>
+                {presence.slice(0, 3).map((p) => (
+                  <div key={p.id}
+                    className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[var(--bg-surface)] text-[0.68rem] font-bold text-white shadow-sm"
+                    style={{ backgroundColor: p.color }} title={p.name}>
+                    {p.initials}
+                    <span className="absolute -bottom-px -right-px h-2 w-2 rounded-full border border-[var(--bg-base)] bg-[#2f6340]" />
+                  </div>
+                ))}
+                {presence.length > 3 && (
+                  <div className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[var(--bg-surface)] bg-[#d6ccbb] text-[0.65rem] font-bold text-[#1a1a1a] shadow-sm">
+                    +{presence.length - 3}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -549,11 +582,13 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
           }}
         >
           {canvasError && (
-            <div className="absolute left-4 top-4 z-10 w-[min(320px,calc(100%-2rem))] rounded-xl border border-[rgba(255,122,122,.4)] bg-[rgba(255,87,91,.15)] p-3">
-              <p className="text-[0.86rem] text-[#8c2317]">{canvasError}</p>
-              <button type="button" className="btn btn-outline btn-sm mt-2" onClick={retryCanvas}>
-                Retry Canvas Sync
-              </button>
+            <div className="absolute inset-x-4 top-4 z-20 flex justify-center pointer-events-none">
+              <div className="w-[min(320px,calc(100%-2rem))] rounded-xl border border-[rgba(255,122,122,.4)] bg-[rgba(255,87,91,.15)] p-3 shadow-lg pointer-events-auto backdrop-blur-sm">
+                <p className="text-[0.86rem] text-[#8c2317]">{canvasError}</p>
+                <button type="button" className="btn btn-outline btn-sm mt-2" onClick={retryCanvas}>
+                  Retry Canvas Sync
+                </button>
+              </div>
             </div>
           )}
           <CanvasPane />
@@ -614,7 +649,43 @@ export default function RoomPage({ params }: { params: Promise<{ roomId: string 
                 overflow: 'hidden',
               }}
             >
-              <ChatPanel />
+              <div className="flex h-full min-h-0 flex-col gap-2">
+                <div className="glass flex shrink-0 items-center gap-1 rounded-[14px] px-2 py-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setInsightTab('chat')}
+                    className={`btn btn-sm ${insightTab === 'chat' ? 'btn-primary' : 'btn-outline'}`}
+                  >
+                    Chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInsightTab('transcript')}
+                    className={`btn btn-sm ${insightTab === 'transcript' ? 'btn-primary' : 'btn-outline'}`}
+                  >
+                    Transcript
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInsightTab('ai')}
+                    className={`btn btn-sm ${insightTab === 'ai' ? 'btn-primary' : 'btn-outline'}`}
+                  >
+                    AI
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <div style={{ display: insightTab === 'chat' ? 'block' : 'none', height: '100%' }}>
+                    <ChatPanel />
+                  </div>
+                  <div style={{ display: insightTab === 'transcript' ? 'block' : 'none', height: '100%' }}>
+                    <TranscriptPanel />
+                  </div>
+                  <div style={{ display: insightTab === 'ai' ? 'block' : 'none', height: '100%' }}>
+                    <AIPanel roomId={roomId} />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

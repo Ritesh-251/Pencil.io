@@ -142,11 +142,25 @@ export const ChatPanel = () => {
     };
   }, [roomId, user?.id]);
 
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const onType = (value: string) => {
     setText(value);
-    if (!typing && value.trim()) {
+
+    if (value.trim()) {
       setTyping(true);
-      setTimeout(() => setTyping(false), 1300);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      typingTimeoutRef.current = setTimeout(() => {
+        setTyping(false);
+        typingTimeoutRef.current = null;
+      }, 1500);
+    } else {
+      setTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
     }
   };
 

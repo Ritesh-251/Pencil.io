@@ -53,7 +53,7 @@ async function bootstrap() {
     pubsub.subscribe((event) => {
       roomManager.broadCast(event.roomId, {
         type: event.type,
-        ...event.payload,
+        payload: event.payload,
       });
     });
 

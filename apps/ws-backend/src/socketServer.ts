@@ -372,10 +372,6 @@ export async function startSocketServer() {
     })
   })
 
-  wss.on("connection", (socket, request) => {
-    socketManager.handleConnection(socket, request);
-  });
-
   await new Promise<void>((resolve) => {
     server.listen(port, resolve)
   })

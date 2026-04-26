@@ -102,7 +102,7 @@ export class SocketManager {
 
       recordIngress()
 
-      this.checkRateLimit(socket.userId!)
+      this.checkRateLimit(socket.id!)
 
       if (isOverloaded() && WRITE_EVENTS.has(normalizedEvent.type)) {
         recordBackpressureTrigger()
@@ -131,9 +131,9 @@ export class SocketManager {
     }
   }
 
-  private checkRateLimit(userId: string) {
+  private checkRateLimit(socketId: string) {
     const now = Date.now()
-    const current = this.rateMap.get(userId) || { count: 0, start: now }
+    const current = this.rateMap.get(socketId) || { count: 0, start: now }
 
     if (now - current.start > RATE_WINDOW_MS) {
       current.start = now
@@ -141,7 +141,7 @@ export class SocketManager {
     }
 
     current.count += 1
-    this.rateMap.set(userId, current)
+    this.rateMap.set(socketId, current)
 
     if (current.count > RATE_LIMIT_PER_SEC) {
       throw new Error("Rate limit exceeded")
@@ -170,8 +170,8 @@ export class SocketManager {
       }
     } finally {
       roomManager.removeSocket(socket);
-      if (socket.userId) {
-        this.rateMap.delete(socket.userId)
+      if (socket.id) {
+        this.rateMap.delete(socket.id)
       }
     }
 

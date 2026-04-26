@@ -19,6 +19,7 @@ export const api = {
   get: async (path: string, options?: RequestInit) => fetchX(path, { ...options, method: 'GET' }),
   post: async (path: string, body?: any, options?: RequestInit) => fetchX(path, { ...options, method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: async (path: string, body?: any, options?: RequestInit) => fetchX(path, { ...options, method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: async (path: string, options?: RequestInit) => fetchX(path, { ...options, method: 'DELETE' }),
 };
 
 function getStoredToken(): string | null {

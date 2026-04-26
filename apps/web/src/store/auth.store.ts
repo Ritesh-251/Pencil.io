@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 
 interface AuthState {
-  user: { id: string; username: string; email: string } | null;
+  user: { id: string; username: string; email: string; isVerified?: boolean } | null;
   token: string | null;
   setAuth: (user: any, token: string) => void;
+  updateUser: (data: Partial<NonNullable<AuthState['user']>>) => void;
   logout: () => void;
 }
 
@@ -34,7 +35,7 @@ const getInitialAuthState = () => {
 
 const initialAuthState = getInitialAuthState();
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: initialAuthState.user,
   token: initialAuthState.token,
   setAuth: (user, token) => {
@@ -45,6 +46,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.setItem('token', token);
     document.cookie = `has_session=true; path=/; max-age=604800`;
     set({ user, token });
+  },
+  updateUser: (data) => {
+    const user = get().user;
+    if (!user) return;
+    const newUser = { ...user, ...data };
+    localStorage.setItem('user', JSON.stringify(newUser));
+    set({ user: newUser });
   },
   logout: () => {
     localStorage.removeItem('user');

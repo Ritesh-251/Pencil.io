@@ -100,9 +100,40 @@ export class AiController {
         where: { roomId }, create: { roomId, summary }, update: { summary }
       });
 
+      // 🔥 Trigger Email Summary to participants
+      void this.notifyParticipants(roomId, summary);
+
       return res.status(200).json({ summary, provider, counts: ingestResult.counts, cached: false });
     } catch (error: any) {
       return res.status(500).json({ message: error.message });
+    }
+  }
+
+  private async notifyParticipants(roomId: string, summary: string) {
+    try {
+      const room = await prisma.room.findUnique({
+        where: { id: roomId },
+        include: { members: { include: { user: { select: { email: true } } } } }
+      });
+
+      if (!room) return;
+
+      const emails = room.members.map(m => m.user.email).filter(Boolean);
+      if (emails.length === 0) return;
+
+      const channel = getChannel();
+      const content = Buffer.from(JSON.stringify({
+        type: "SESSION_SUMMARY",
+        payload: {
+          emails,
+          summary,
+          roomName: room.name || "Collaborative Session"
+        }
+      }));
+
+      channel.publish("events.exchange", "email.summary", content, { persistent: true });
+    } catch (error) {
+      console.error("[AiController] Failed to notify participants", error);
     }
   }
 }

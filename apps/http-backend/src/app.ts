@@ -3,13 +3,23 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import swaggerUi from "swagger-ui-express";
+
 import { prisma } from "@repo/db";
 import { redisClient } from "./infra/redis";
 import { generalRateLimitMiddleware } from "./middleware/generalRateLimit.middleware";
 import { logger } from "./infra/logger";
 import { swaggerSpec } from "./infra/swagger";
 
+// Import Routers
+import userRouter from "./routes/auth.routes";
+import roomsRouter from "./routes/rooms.index.routes";
+import internalRouter from "./routes/internal.routes";
+import planningRouter from "./routes/planning.routes";
+
 const app: express.Application = express();
+
+// 0. Trust Proxy (Required for rate-limiting)
+app.set('trust proxy', 1);
 
 // 1. Security Headers
 app.use(helmet());
@@ -51,51 +61,23 @@ app.use(generalRateLimitMiddleware);
 // 3. API Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-/**
- * @openapi
- * /health:
- *   get:
- *     description: Returns the health status of the system and its dependencies.
- *     responses:
- *       200:
- *         description: System is healthy.
- */
+// 4. Health Check
 app.get("/health", async (_req, res) => {
 	try {
 		const dbPromise = prisma.$queryRaw`SELECT 1`;
 		const redisPromise = redisClient.ping();
-
-		const timeout = new Promise((_, reject) =>
-			setTimeout(() => reject(new Error("Health check timeout")), 5000)
-		);
-
-		await Promise.race([Promise.all([dbPromise, redisPromise]), timeout]);
-
-		res.status(200).json({
-			status: "ok",
-			timestamp: new Date().toISOString(),
-			services: {
-				database: "healthy",
-				redis: "healthy",
-			},
-		});
+		await Promise.all([dbPromise, redisPromise]);
+		res.status(200).json({ status: "ok", services: { database: "healthy", redis: "healthy" } });
 	} catch (error) {
-		logger.error({ err: error }, "Deep health check failed");
-		res.status(503).json({
-			status: "unhealthy",
-			timestamp: new Date().toISOString(),
-			error: error instanceof Error ? error.message : "Unknown error",
-		});
+		res.status(503).json({ status: "unhealthy" });
 	}
 });
 
-import userRouter from "./routes/auth.routes";
-import roomsRouter from "./routes/rooms.index.routes";
-import internalRouter from "./routes/internal.routes";
-
+// 5. API Routes
 app.use("/api/v1/auth", userRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/rooms", roomsRouter);
+app.use("/api/v1/planning", planningRouter);
 app.use("/api/internal", internalRouter);
 
 export { app };

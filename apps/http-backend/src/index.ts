@@ -15,6 +15,8 @@ import { prisma } from "@repo/db";
 import { app } from "./app";
 import { logger } from "./infra/logger";
 import { initRedis } from "./infra/redis";
+import { initRabbitMQ, onRabbitReady } from "./infra/rabbitmq";
+import { startEmailConsumer } from "./consumers/email.consumer";
 
 const PORT = process.env.PORT;
 async function startServer() {
@@ -23,6 +25,13 @@ async function startServer() {
     logger.info("Postgres client connected")
     await initRedis();
     logger.info("Redis connected");
+    await initRabbitMQ();
+    logger.info("RabbitMQ connected");
+
+    onRabbitReady(async () => {
+      await startEmailConsumer();
+    });
+
     app.listen(PORT, () => {
       logger.info({ port: PORT }, "HTTP backend started")
     });

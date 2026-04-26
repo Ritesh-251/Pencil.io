@@ -7,11 +7,43 @@ import {
   logout,
   logoutAll,
   generateAccessToken,
+  verifyEmail,
+  resendVerification,
 } from "../controller/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import { authRateLimitMiddleware } from "../middleware/authRateLimit.middleware";
 
 const router: Router = Router();
+
+/**
+ * @openapi
+ * /api/v1/auth/verify:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Verify user email via token
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         schema:
+ *           type: string
+ *         required: true
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ */
+router.get("/verify", verifyEmail);
+
+/**
+ * @openapi
+ * /api/v1/auth/resend-verification:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Resend verification email
+ *     responses:
+ *       200:
+ *         description: Verification email resent
+ */
+router.post("/resend-verification", authMiddleware, resendVerification);
 
 /**
  * @openapi
@@ -60,6 +92,7 @@ router.post("/signup", authRateLimitMiddleware, signup);
  *         description: Login successful
  */
 router.post("/signin", authRateLimitMiddleware, signin);
+
 router.post("/refresh", authRateLimitMiddleware, generateAccessToken);
 router.post("/logout", logout);
 router.post("/logout-all", authMiddleware, logoutAll);

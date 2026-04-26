@@ -4,12 +4,11 @@ import { logger } from "./logger";
 
 export const rabbitClient = new RabbitMQClient({
   url: process.env.RABBITMQ_URL!,
-  serviceName: "ai-service",
+  serviceName: "http-backend",
   logger,
 });
 
 rabbitClient.setTopology(async (channel: ConfirmChannel) => {
-  await channel.assertQueue("ai:ingest", { durable: true });
   await channel.assertExchange("events.exchange", "topic", { durable: true });
   await channel.assertQueue("email.queue", { durable: true });
   await channel.bindQueue("email.queue", "events.exchange", "email.*");

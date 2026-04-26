@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "@repo/auth";
+import { prisma } from "@repo/db";
 
 export interface AuthRequest extends Request {
   userId?: string;
+  userEmail?: string;
 }
 
-export function authMiddleware(
+export async function authMiddleware(
   req: AuthRequest,
   res: Response,
   next: NextFunction,
@@ -35,7 +37,18 @@ export function authMiddleware(
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    req.userId = userId;
+    // Populate user info
+    const user = await prisma.user.findUnique({ 
+      where: { id: userId },
+      select: { id: true, email: true }
+    });
+
+    if (!user) {
+      return res.status(401).json({ message: "User not found" });
+    }
+
+    req.userId = user.id;
+    req.userEmail = user.email;
 
     next();
   } catch (error) {

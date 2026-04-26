@@ -54,6 +54,29 @@ export const signin = async (req: Request, res: Response) => {
   }
 };
 
+export const verifyEmail = async (req: Request, res: Response) => {
+  try {
+    const token = String(req.query.token || "");
+    if (!token) throw new ApiError(400, "Token is required");
+    
+    const result = await authService.verifyEmail(token);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const status = error instanceof ApiError ? error.statusCode : 500;
+    return res.status(status).json({ message: error.message || "Internal server error" });
+  }
+};
+
+export const resendVerification = async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await authService.resendVerification(req.userId!);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const status = error instanceof ApiError ? error.statusCode : 500;
+    return res.status(status).json({ message: error.message || "Internal server error" });
+  }
+};
+
 export const generateAccessToken = async (req: Request, res: Response) => {
   try {
     const refreshToken = String(req.cookies.refreshToken || "");

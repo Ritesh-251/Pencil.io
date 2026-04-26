@@ -14,27 +14,12 @@ const store = new RedisStore({
 
 export const generalRateLimitMiddleware = rateLimit({
   windowMs: WINDOW_MS,
-  max: MAX_REQUESTS,
+  limit: MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
   store,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const ip = typeof forwarded === "string"
-      ? forwarded.split(",")[0]?.trim()
-      : req.ip;
-    return ip || "unknown";
-  },
   handler: (req, res, _next, options) => {
-    logger.warn({
-      path: req.path,
-      ip: req.ip,
-      limit: options.limit,
-    }, "General rate limit exceeded");
-
-    res.status(429).json({
-      message: "Too many requests, please try again later.",
-      retryAfterMs: options.windowMs,
-    });
+    logger.warn({ path: req.path, ip: req.ip }, "General rate limit exceeded");
+    res.status(429).json({ message: "Too many requests, please try again later.", retryAfterMs: options.windowMs });
   },
 });

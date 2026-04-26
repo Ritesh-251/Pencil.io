@@ -16,11 +16,15 @@ model User {
   password  String
   createdAt DateTime @default(now())
 
+  isVerified      Boolean  @default(false)
+  verificationToken String?
+
   refreshTokens RefreshToken[]
   messages      Message[]
   rooms         RoomMember[]
   ownedRooms    Room[] @relation("RoomCreator")
   joinRequests  JoinRequest[]
+  scheduledMeetings ScheduledMeeting[] @relation("MeetingCreator")
 }
 
 model RefreshToken {
@@ -63,6 +67,7 @@ model Room {
   transcriptSegments  TranscriptSegment[]
   sessionChunks       SessionChunk[]
   sessionSummary      SessionSummary?
+  scheduledMeetings   ScheduledMeeting[]
 
   @@index([createdBy])
 }
@@ -243,6 +248,27 @@ model JoinRequest {
 
   @@unique([userId, roomId])
   @@index([roomId])
+}
+
+model ScheduledMeeting {
+  id          String   @id @default(uuid())
+  title       String
+  startTime   DateTime
+  endTime     DateTime
+  
+  roomId      String
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  
+  creatorId   String
+  creator     User     @relation("MeetingCreator", fields: [creatorId], references: [id])
+  
+  attendees   String[] // Array of emails
+  
+  createdAt   DateTime @default(now())
+
+  @@index([startTime])
+  @@index([roomId])
+  @@index([creatorId])
 }
 
 enum JoinRequestStatus {

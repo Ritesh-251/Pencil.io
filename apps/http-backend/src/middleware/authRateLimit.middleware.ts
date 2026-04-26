@@ -24,55 +24,25 @@ const refreshStore = new RedisStore({
 
 export const authRateLimitMiddleware = rateLimit({
   windowMs: WINDOW_MS,
-  max: MAX_REQUESTS,
+  limit: MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
   store: authStore,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const ip = typeof forwarded === "string"
-      ? forwarded.split(",")[0]?.trim()
-      : req.ip;
-    return `${ip || "unknown"}:${req.path}`;
-  },
   handler: (req, res, _next, options) => {
-    logger.warn({
-      path: req.path,
-      ip: req.ip,
-      limit: options.limit,
-    }, "Rate limit exceeded");
-
-    res.status(429).json({
-      message: "Too many requests",
-      retryAfterMs: options.windowMs,
-    });
+    logger.warn({ path: req.path, ip: req.ip }, "Auth rate limit exceeded");
+    res.status(429).json({ message: "Too many requests", retryAfterMs: options.windowMs });
   },
-  skip: (req) => req.path.includes('/refresh'), // Skip the main limiter for refresh route
+  skip: (req) => req.path.includes('/refresh'), 
 });
 
 export const refreshRateLimitMiddleware = rateLimit({
   windowMs: REFRESH_WINDOW_MS,
-  max: REFRESH_MAX_REQUESTS,
+  limit: REFRESH_MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
   store: refreshStore,
-  keyGenerator: (req) => {
-    const forwarded = req.headers["x-forwarded-for"];
-    const ip = typeof forwarded === "string"
-      ? forwarded.split(",")[0]?.trim()
-      : req.ip;
-    return `${ip || "unknown"}:refresh`;
-  },
   handler: (req, res, _next, options) => {
-    logger.warn({
-      path: req.path,
-      ip: req.ip,
-      limit: options.limit,
-    }, "Refresh rate limit exceeded");
-
-    res.status(429).json({
-      message: "Too many requests",
-      retryAfterMs: options.windowMs,
-    });
+    logger.warn({ path: req.path, ip: req.ip }, "Refresh rate limit exceeded");
+    res.status(429).json({ message: "Too many requests", retryAfterMs: options.windowMs });
   },
 });

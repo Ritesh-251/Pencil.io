@@ -17,6 +17,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@repo/common": "workspace:*",
     "ioredis": "^5.10.0"
   }
 }

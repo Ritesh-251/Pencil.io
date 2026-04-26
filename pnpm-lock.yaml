@@ -364,6 +364,9 @@ importers:
 
   packages/redis:
     dependencies:
+      '@repo/common':
+        specifier: workspace:*
+        version: link:../common
       ioredis:
         specifier: ^5.10.0
         version: 5.10.0

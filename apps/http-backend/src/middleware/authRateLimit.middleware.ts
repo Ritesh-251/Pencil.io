@@ -9,11 +9,17 @@ const MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX || 20);
 const REFRESH_WINDOW_MS = Number(process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS || 60_000);
 const REFRESH_MAX_REQUESTS = Number(process.env.AUTH_REFRESH_RATE_LIMIT_MAX || 120);
 
-// Redis store configuration
-const store = new RedisStore({
+// Redis store configurations
+const authStore = new RedisStore({
   // @ts-expect-error - ioredis client compatibility
   sendCommand: (...args: string[]) => redisClient.call(...args),
   prefix: "rl:auth:",
+});
+
+const refreshStore = new RedisStore({
+  // @ts-expect-error - ioredis client compatibility
+  sendCommand: (...args: string[]) => redisClient.call(...args),
+  prefix: "rl:refresh:",
 });
 
 export const authRateLimitMiddleware = rateLimit({
@@ -21,7 +27,7 @@ export const authRateLimitMiddleware = rateLimit({
   max: MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
-  store,
+  store: authStore,
   keyGenerator: (req) => {
     const forwarded = req.headers["x-forwarded-for"];
     const ip = typeof forwarded === "string"
@@ -49,8 +55,7 @@ export const refreshRateLimitMiddleware = rateLimit({
   max: REFRESH_MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
-  store,
-  prefix: "rl:refresh:",
+  store: refreshStore,
   keyGenerator: (req) => {
     const forwarded = req.headers["x-forwarded-for"];
     const ip = typeof forwarded === "string"

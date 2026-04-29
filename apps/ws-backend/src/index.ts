@@ -14,10 +14,11 @@ try {
 (BigInt.prototype as any).toJSON = function () {
   return this.toString();
 };
-import { initRabbitMQ, onRabbitReady } from "./infra/rabbitmq";
-import { startChatConsumer } from "./consumers/chat.consumer"
-import { startBroadcastConsumer } from "./consumers/broadcast.consumer"
-import { startCanvasConsumer } from "./consumers/canvas.consumer"
+
+import { initRabbitMQ, onRabbitReady, closeRabbitMQ } from "./infra/rabbitmq";
+import { startChatConsumer } from "./consumers/chat.consumer";
+import { startBroadcastConsumer } from "./consumers/broadcast.consumer";
+import { startCanvasConsumer } from "./consumers/canvas.consumer";
 import { prisma } from "@repo/db";
 import { startSocketServer } from "./socketServer";
 import { initRedis, pubsub } from "./infra/redis";
@@ -29,8 +30,8 @@ import { logger } from "./infra/logger";
 
 async function bootstrap() {
   try {
-    startMetricsEngine()
- 
+    startMetricsEngine();
+
     await prisma.$connect();
     logger.info({ stage: "consume", type: "BOOT" }, "Postgres connected");
 
@@ -38,17 +39,15 @@ async function bootstrap() {
     logger.info({ stage: "consume", type: "BOOT" }, "Redis connected");
 
     onRabbitReady(async () => {
-      await startChatConsumer()
-      await startBroadcastConsumer()
-      await startCanvasConsumer()
-    })
+      await startChatConsumer();
+      await startBroadcastConsumer();
+      await startCanvasConsumer();
+    });
 
-    await initRabbitMQ()   
+    await initRabbitMQ();
 
-  startCompactionScheduler()
-  startQueueMonitor()
-
-  
+    startCompactionScheduler();
+    startQueueMonitor();
 
     pubsub.subscribe((event) => {
       roomManager.broadCast(event.roomId, {
@@ -57,9 +56,36 @@ async function bootstrap() {
       });
     });
 
-    await startSocketServer();
+    const server = await startSocketServer();
+
+    // Q-12 FIX: Register SIGTERM / SIGINT handlers for graceful Kubernetes
+    // rolling-deploy shutdown.  Without this, the old pod is killed mid-
+    // transaction, leaving RabbitMQ messages unacked and triggering requeue
+    // storms.
+    const shutdown = async (signal: string) => {
+      logger.info(
+        { signal },
+        "Shutdown signal received — draining and exiting",
+      );
+      // 1. Stop accepting new WS upgrades / HTTP requests
+      server.close();
+      // 2. Close the RabbitMQ channel so in-flight confirms can drain
+      await closeRabbitMQ().catch(() => {});
+      // 3. Disconnect from Redis
+      await pubsub.disconnect().catch(() => {});
+      // 4. Release the DB pool
+      await prisma.$disconnect().catch(() => {});
+      logger.info("Graceful shutdown complete");
+      process.exit(0);
+    };
+
+    process.on("SIGTERM", () => void shutdown("SIGTERM"));
+    process.on("SIGINT", () => void shutdown("SIGINT"));
   } catch (err) {
-    logger.error({ err, stage: "consume", type: "BOOT" }, "Server failed to start");
+    logger.error(
+      { err, stage: "consume", type: "BOOT" },
+      "Server failed to start",
+    );
     process.exit(1);
   }
 }

@@ -44,7 +44,9 @@ export class RabbitMQClient {
     if (this.reconnecting) return;
 
     try {
-      this.config.logger?.info(`[${this.config.serviceName}] Connecting to RabbitMQ...`);
+      this.config.logger?.info(
+        `[${this.config.serviceName}] Connecting to RabbitMQ...`,
+      );
       const conn = await amqp.connect(this.config.url);
       this.connection = conn;
 
@@ -62,7 +64,9 @@ export class RabbitMQClient {
       }
 
       this.isHealthy = true;
-      this.config.logger?.info(`[${this.config.serviceName}] RabbitMQ connected and topology ready`);
+      this.config.logger?.info(
+        `[${this.config.serviceName}] RabbitMQ connected and topology ready`,
+      );
 
       for (const listener of this.readyListeners) {
         await listener();
@@ -78,9 +82,14 @@ export class RabbitMQClient {
     this.channel = null;
 
     if (error) {
-      this.config.logger?.error(`[${this.config.serviceName}] RabbitMQ ${reason}`, { err: error });
+      this.config.logger?.error(
+        `[${this.config.serviceName}] RabbitMQ ${reason}`,
+        { err: error },
+      );
     } else {
-      this.config.logger?.info(`[${this.config.serviceName}] RabbitMQ ${reason}`);
+      this.config.logger?.info(
+        `[${this.config.serviceName}] RabbitMQ ${reason}`,
+      );
     }
 
     if (!this.reconnecting) {
@@ -94,7 +103,9 @@ export class RabbitMQClient {
 
   public getChannel(): ConfirmChannel {
     if (!this.channel) {
-      throw new Error(`[${this.config.serviceName}] RabbitMQ channel not initialized`);
+      throw new Error(
+        `[${this.config.serviceName}] RabbitMQ channel not initialized`,
+      );
     }
     return this.channel;
   }
@@ -103,5 +114,24 @@ export class RabbitMQClient {
     return {
       healthy: this.isHealthy,
     };
+  }
+
+  // Q-12: Graceful shutdown — stop the reconnect loop and close the AMQP
+  // connection so in-flight confirms can drain before the process exits.
+  public async close(): Promise<void> {
+    this.reconnecting = true; // prevent the reconnect loop from firing
+    this.isHealthy = false;
+    try {
+      if (this.channel) await this.channel.close();
+    } catch {
+      /* ignore close errors */
+    }
+    try {
+      if (this.connection) await this.connection.close();
+    } catch {
+      /* ignore close errors */
+    }
+    this.channel = null;
+    this.connection = null;
   }
 }

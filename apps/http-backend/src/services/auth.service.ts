@@ -1,5 +1,10 @@
 import { prisma } from "@repo/db";
-import { signAccessToken, comparePassword, hashPassword } from "@repo/auth";
+import {
+  signAccessToken,
+  comparePassword,
+  hashPassword,
+  signRefreshToken,
+} from "@repo/auth";
 import crypto from "crypto";
 import { createSession } from "./sessionService";
 import { ApiError } from "../utils/ApiError";
@@ -11,7 +16,9 @@ export class AuthService {
     try {
       const channel = getChannel();
       const content = Buffer.from(JSON.stringify({ type, payload }));
-      channel.publish("events.exchange", "email.task", content, { persistent: true });
+      channel.publish("events.exchange", "email.task", content, {
+        persistent: true,
+      });
     } catch (error) {
       logger.error({ error }, "Failed to publish email task");
     }
@@ -25,11 +32,11 @@ export class AuthService {
     const verificationToken = crypto.randomBytes(32).toString("hex");
 
     const user = await prisma.user.create({
-      data: { 
-        email, 
+      data: {
+        email,
         password: hashedPassword,
         verificationToken,
-        isVerified: false
+        isVerified: false,
       },
     });
 
@@ -38,11 +45,22 @@ export class AuthService {
     const accessToken = signAccessToken(user.id);
     const refreshToken = await createSession(user.id, req);
 
-    return { userId: user.id, accessToken, refreshToken };
+    return {
+      userId: user.id,
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        isVerified: user.isVerified,
+      },
+    };
   }
 
   async verifyEmail(token: string) {
-    const user = await prisma.user.findFirst({ where: { verificationToken: token } });
+    const user = await prisma.user.findFirst({
+      where: { verificationToken: token },
+    });
     if (!user) throw new ApiError(400, "Invalid or expired verification token");
 
     await prisma.user.update({
@@ -64,7 +82,10 @@ export class AuthService {
       data: { verificationToken },
     });
 
-    this.publishEmailTask("VERIFY_EMAIL", { email: user.email, token: verificationToken });
+    this.publishEmailTask("VERIFY_EMAIL", {
+      email: user.email,
+      token: verificationToken,
+    });
 
     return { message: "Verification email resent" };
   }
@@ -79,27 +100,59 @@ export class AuthService {
     const accessToken = signAccessToken(user.id);
     const refreshToken = await createSession(user.id, req);
 
-    return { userId: user.id, accessToken, refreshToken };
+    return {
+      userId: user.id,
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        isVerified: user.isVerified,
+      },
+    };
   }
 
   async refreshAccessToken(refreshToken: string, req: any) {
-    const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
-    const session = await prisma.refreshToken.findUnique({ where: { tokenHash } });
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
+    const session = await prisma.refreshToken.findUnique({
+      where: { tokenHash },
+    });
 
     if (!session || session.expiresAt < new Date()) {
-      if (session) await prisma.refreshToken.delete({ where: { tokenHash } });
+      if (session)
+        await prisma.refreshToken.deleteMany({ where: { tokenHash } });
       throw new ApiError(401, "Session expired or invalid");
     }
 
-    await prisma.refreshToken.delete({ where: { tokenHash } });
-    const newRefreshToken = await createSession(session.userId, req);
+    const newRefreshToken = signRefreshToken();
+    const newTokenHash = crypto
+      .createHash("sha256")
+      .update(newRefreshToken)
+      .digest("hex");
+
+    await prisma.refreshToken.update({
+      where: { tokenHash },
+      data: {
+        tokenHash: newTokenHash,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+      },
+    });
+
     const accessToken = signAccessToken(session.userId);
 
     return { accessToken, refreshToken: newRefreshToken };
   }
 
   async logout(refreshToken: string) {
-    const tokenHash = crypto.createHash("sha256").update(refreshToken).digest("hex");
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(refreshToken)
+      .digest("hex");
     await prisma.refreshToken.deleteMany({ where: { tokenHash } });
   }
 

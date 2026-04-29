@@ -1,5 +1,6 @@
 import os
 import asyncio
+import inspect
 from typing import Any
 
 import httpx
@@ -21,6 +22,11 @@ AGENT_NAME = os.getenv("TRANSCRIPTION_AGENT_NAME", "transcriber")
 PERSIST_TIMEOUT_SECONDS = 15
 PERSIST_MAX_RETRIES = 3
 PERSIST_RETRY_BASE_DELAY_SECONDS = 0.75
+PUBLISH_MAX_RETRIES = 3
+PUBLISH_RETRY_BASE_DELAY_SECONDS = 0.5
+
+_http_client: httpx.AsyncClient | None = None
+_http_client_lock = asyncio.Lock()
 
 
 def _required_env(name: str) -> str:
@@ -106,6 +112,22 @@ def _is_final(transcript: Any) -> bool:
     return False
 
 
+async def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    async with _http_client_lock:
+      if _http_client is None:
+          _http_client = httpx.AsyncClient(timeout=PERSIST_TIMEOUT_SECONDS)
+      return _http_client
+
+
+async def _close_http_client() -> None:
+    global _http_client
+    async with _http_client_lock:
+        if _http_client is not None:
+            await _http_client.aclose()
+            _http_client = None
+
+
 async def _persist_transcript(
     backend_url: str,
     internal_secret: str,
@@ -115,21 +137,62 @@ async def _persist_transcript(
 
     for attempt in range(1, PERSIST_MAX_RETRIES + 1):
         try:
-            async with httpx.AsyncClient(timeout=PERSIST_TIMEOUT_SECONDS) as client:
-                response = await client.post(
-                    f"{backend_url.rstrip('/')}/api/internal/transcript",
-                    json=payload,
-                    headers={"Authorization": f"Bearer {internal_secret}"},
-                )
-                response.raise_for_status()
+            client = await _get_http_client()
+            response = await client.post(
+                f"{backend_url.rstrip('/')}/api/internal/transcript",
+                json=payload,
+                headers={"Authorization": f"Bearer {internal_secret}"},
+            )
+            response.raise_for_status()
             return
         except Exception as error:
             last_error = error
             if attempt >= PERSIST_MAX_RETRIES:
                 break
             await asyncio.sleep(PERSIST_RETRY_BASE_DELAY_SECONDS * attempt)
+async def _publish_transcript_to_room(room: Any, participant_identity: str, text: str, start_ms: int, end_ms: int) -> bool:
+    last_error: Exception | None = None
 
-    print(f"[transcript:persist:error] {last_error}")
+    for attempt in range(1, PUBLISH_MAX_RETRIES + 1):
+        try:
+            import livekit.rtc as rtc
+
+            maybe_result = room.local_participant.publish_transcription(
+                participant_identity=participant_identity,
+                segments=[
+                    rtc.TranscriptionSegment(
+                        id=f"seg-{start_ms}-{participant_identity}",
+                        text=text,
+                        start_time=start_ms,
+                        end_time=end_ms,
+                        final=True,
+                    )
+                ],
+            )
+            if inspect.isawaitable(maybe_result):
+                await maybe_result
+            return True
+        except Exception as error:
+            last_error = error
+            if attempt < PUBLISH_MAX_RETRIES:
+                await asyncio.sleep(PUBLISH_RETRY_BASE_DELAY_SECONDS * attempt)
+
+    print(f"[transcript:publish:error] {last_error}")
+    return False
+
+
+def _build_session(stt_model: str) -> AgentSession:
+    try:
+        return AgentSession(
+            stt=deepgram.STT(
+                model=stt_model,
+            ),
+        )
+    except Exception as error:
+        raise RuntimeError(
+            f"Unsupported or invalid Deepgram STT model '{stt_model}'. "
+            "Check LIVEKIT_STT_MODEL and confirm the API key has access to that model."
+        ) from error
 
 
 async def entrypoint(ctx: JobContext):
@@ -142,64 +205,84 @@ async def entrypoint(ctx: JobContext):
     )
 
     await ctx.connect()
-    session = AgentSession(
-        stt=deepgram.STT(
-            model=stt_model,
-        ),
-    )
+    session = _build_session(stt_model)
 
     @session.on("user_input_transcribed")
-    def on_transcript(transcript):
-        if not _is_final(transcript):
+    def on_transcript(event: Any):
+        # BUG-10 FIX: Use robust extraction helpers to handle different LiveKit event formats.
+        text = _extract_text(event)
+        if not text:
             return
 
-        participant_identity = _extract_identity(transcript)
-        text = _extract_text(transcript)
-        if not text.strip():
-            print(f"[transcript:skip] empty text payload={transcript!r}")
+        participant_identity = _extract_identity(event)
+        
+        # We only persist and broadcast FINAL transcripts to avoid noise/duplicates
+        if not _is_final(event):
             return
 
-        start_ms = _to_ms(getattr(transcript, "start_time", 0))
-        end_ms = _to_ms(getattr(transcript, "end_time", start_ms))
+        start_ms = _to_ms(getattr(event, "start_time", 0))
+        end_ms = _to_ms(getattr(event, "end_time", start_ms))
 
         payload = {
             "roomId": ctx.room.name,
             "participantIdentity": participant_identity,
-            "text": text.strip(),
+            "text": text,
             "startMs": start_ms,
             "endMs": max(start_ms, end_ms),
         }
+
         print(
             f"[transcript] room={ctx.room.name} speaker={participant_identity} "
             f"startMs={payload['startMs']} endMs={payload['endMs']} text={payload['text']}"
         )
 
-        async def persist():
+        async def publish_then_persist():
+            published = await _publish_transcript_to_room(
+                ctx.room,
+                participant_identity,
+                text,
+                start_ms,
+                payload["endMs"],
+            )
+            if not published:
+                return
             await _persist_transcript(backend_url, internal_secret, payload)
 
-        asyncio.create_task(persist())
+        asyncio.create_task(publish_then_persist())
 
-    await session.start(
-        agent=Agent(
-            instructions="You are a transcription-only assistant. Do not speak or generate replies.",
-        ),
-        room=ctx.room,
-        room_input_options=RoomInputOptions(
-            audio_enabled=True,
-            video_enabled=False,
-            text_enabled=False,
-        ),
-        room_output_options=RoomOutputOptions(
-            transcription_enabled=True,
-            sync_transcription=True,
-        ),
-    )
+    try:
+        await session.start(
+            agent=Agent(
+                instructions="You are a transcription-only assistant. Do not speak or generate replies.",
+            ),
+            room=ctx.room,
+            room_input_options=RoomInputOptions(
+                audio_enabled=True,
+                video_enabled=False,
+                text_enabled=False,
+            ),
+            room_output_options=RoomOutputOptions(
+                transcription_enabled=True,
+                sync_transcription=True,
+            ),
+        )
+    except Exception as error:
+        raise RuntimeError(
+            f"Failed to initialize transcription session for model '{stt_model}'. "
+            "Verify the Deepgram model is supported by the API key."
+        ) from error
 
 
 if __name__ == "__main__":
-    cli.run_app(
-        WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            agent_name=AGENT_NAME,
+    try:
+        cli.run_app(
+            WorkerOptions(
+                entrypoint_fnc=entrypoint,
+                agent_name=AGENT_NAME,
+            )
         )
-    )
+    finally:
+        try:
+            asyncio.run(_close_http_client())
+        except RuntimeError:
+            pass

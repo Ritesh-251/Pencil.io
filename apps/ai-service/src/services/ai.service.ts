@@ -1,4 +1,5 @@
 import { AiServiceEnvSchema } from "@repo/validation";
+import { logger } from "../infra/logger";
 
 // types
 export type VisionImage = {
@@ -33,12 +34,13 @@ export class AiService {
 
   async embedText(text: string): Promise<number[]> {
     const attempted: string[] = [];
-    const candidateModels = Array.from(new Set([
-      this.config.GEMINI_EMBED_MODEL,
-      "text-embedding-004",
-      "gemini-embedding-2",
-      ...(this.discoveredEmbeddingModels || []),
-    ])).filter(Boolean);
+    const candidateModels = Array.from(
+      new Set([
+        this.config.GEMINI_EMBED_MODEL,
+        "text-embedding-004",
+        "gemini-embedding-2",
+      ]),
+    ).filter(Boolean);
 
     for (const modelName of candidateModels) {
       attempted.push(modelName);
@@ -51,25 +53,39 @@ export class AiService {
       }
     }
 
-    const listedModels = await this.listEmbeddingModels();
-    for (const modelName of listedModels) {
+    if (this.discoveredEmbeddingModels === null) {
+      await this.listEmbeddingModels();
+    }
+
+    for (const modelName of this.discoveredEmbeddingModels || []) {
       if (attempted.includes(modelName)) continue;
       try {
         return await this.geminiEmbedWithModel(modelName, text);
-      } catch { continue; }
+      } catch {
+        continue;
+      }
     }
 
-    throw new Error(`No supported Gemini embedding model worked. Tried: ${attempted.join(", ")}`);
+    const failedModels = attempted.join(", ");
+    throw new Error(
+      `No supported Gemini embedding model worked. Tried: ${failedModels || "none"}`,
+    );
   }
 
-  private async geminiEmbedWithModel(modelName: string, text: string): Promise<number[]> {
-    const payload = await this.geminiRequest(`models/${modelName}:embedContent`, {
-      method: "POST",
-      body: JSON.stringify({
-        content: { parts: [{ text }] },
-        outputDimensionality: this.config.GEMINI_EMBED_DIMENSION,
-      }),
-    });
+  private async geminiEmbedWithModel(
+    modelName: string,
+    text: string,
+  ): Promise<number[]> {
+    const payload = await this.geminiRequest(
+      `models/${modelName}:embedContent`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          content: { parts: [{ text }] },
+          outputDimensionality: this.config.GEMINI_EMBED_DIMENSION,
+        }),
+      },
+    );
 
     return payload?.embedding?.values as number[];
   }
@@ -78,15 +94,20 @@ export class AiService {
     const payload = await this.geminiRequest("models", { method: "GET" });
     const models = Array.isArray(payload?.models) ? payload.models : [];
     this.discoveredEmbeddingModels = models
-      .filter((item: any) => item?.supportedGenerationMethods?.includes("embedContent"))
+      .filter((item: any) =>
+        item?.supportedGenerationMethods?.includes("embedContent"),
+      )
       .map((item: any) => item.name.replace(/^models\//, ""));
     return this.discoveredEmbeddingModels || [];
   }
 
-  async generateWithFallback(params: GenerateParams): Promise<GenerateResponse> {
-    const visionImage = typeof params.image === "string" 
-      ? await this.normalizeVisionImage(params.image)
-      : params.image;
+  async generateWithFallback(
+    params: GenerateParams,
+  ): Promise<GenerateResponse> {
+    const visionImage =
+      typeof params.image === "string"
+        ? await this.normalizeVisionImage(params.image)
+        : params.image;
 
     try {
       const text = await this.geminiGenerate({
@@ -95,7 +116,10 @@ export class AiService {
       });
       return { text, provider: "gemini" };
     } catch (geminiError: any) {
-      console.warn("Gemini failed, falling back to Ollama:", geminiError.message);
+      console.warn(
+        "Gemini failed, falling back to Ollama:",
+        geminiError.message,
+      );
       const text = await this.ollamaGenerate({
         ...params,
         image: visionImage,
@@ -108,29 +132,39 @@ export class AiService {
     }
   }
 
-  private async geminiGenerate(params: Omit<GenerateParams, "image"> & { image?: VisionImage }): Promise<string> {
+  private async geminiGenerate(
+    params: Omit<GenerateParams, "image"> & { image?: VisionImage },
+  ): Promise<string> {
     const parts: any[] = [{ text: params.prompt }];
     if (params.image) {
       parts.push({
-        inlineData: { mimeType: params.image.mimeType, data: params.image.data }
+        inlineData: {
+          mimeType: params.image.mimeType,
+          data: params.image.data,
+        },
       });
     }
 
-    const payload = await this.geminiRequest(`models/${params.model}:generateContent`, {
-      method: "POST",
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: params.system }] },
-        contents: [{ role: "user", parts }],
-        generationConfig: { temperature: params.temperature ?? 0.2 },
-      }),
-    });
+    const payload = await this.geminiRequest(
+      `models/${params.model}:generateContent`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: params.system }] },
+          contents: [{ role: "user", parts }],
+          generationConfig: { temperature: params.temperature ?? 0.2 },
+        }),
+      },
+    );
 
     const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error("Gemini returned empty response");
     return text.trim();
   }
 
-  private async ollamaGenerate(params: Omit<GenerateParams, "image"> & { image?: VisionImage }): Promise<string> {
+  private async ollamaGenerate(
+    params: Omit<GenerateParams, "image"> & { image?: VisionImage },
+  ): Promise<string> {
     const userMessage: any = { role: "user", content: params.prompt };
     if (params.image) userMessage.images = [params.image.data];
 
@@ -146,7 +180,8 @@ export class AiService {
     });
 
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error || "Ollama request failed");
+    if (!response.ok)
+      throw new Error(payload?.error || "Ollama request failed");
     return payload?.message?.content?.trim() || "";
   }
 
@@ -158,28 +193,52 @@ export class AiService {
     });
 
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload?.error?.message || `Gemini error ${response.status}`);
+    if (!response.ok)
+      throw new Error(
+        payload?.error?.message || `Gemini error ${response.status}`,
+      );
     return payload;
   }
 
-  private async normalizeVisionImage(image?: string): Promise<VisionImage | undefined> {
+  private async normalizeVisionImage(
+    image?: string,
+  ): Promise<VisionImage | undefined> {
     if (!image) return undefined;
-    if (/^https?:\/\//i.test(image)) return this.fetchImage(image);
-    
+    if (/^https?:\/\//i.test(image)) {
+      const allowedPrefixes = (process.env.IMAGE_CDN_BASE_URL || "")
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+      const isAllowed = allowedPrefixes.some((prefix) =>
+        image.startsWith(prefix),
+      );
+      if (!isAllowed) {
+        logger.warn({ image }, "SSRF attempt: Blocked external image fetch");
+        return undefined;
+      }
+      return this.fetchImage(image);
+    }
+
     const match = image.match(/^data:([^;,]+);base64,([\s\S]+)$/i);
     if (match) return { mimeType: match[1]!, data: match[2]! };
-    
+
     return { mimeType: "image/png", data: image };
   }
 
   private async fetchImage(url: string): Promise<VisionImage> {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("Failed to fetch image");
-    const arrayBuffer = await res.arrayBuffer();
-    return {
-      mimeType: res.headers.get("content-type") || "image/png",
-      data: Buffer.from(arrayBuffer).toString("base64"),
-    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+      const arrayBuffer = await res.arrayBuffer();
+      return {
+        mimeType: res.headers.get("content-type") || "image/png",
+        data: Buffer.from(arrayBuffer).toString("base64"),
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }
 

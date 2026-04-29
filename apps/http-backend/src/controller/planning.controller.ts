@@ -33,11 +33,19 @@ export const scheduleMeeting = async (req: AuthRequest, res: Response) => {
 
 export const getMyMeetings = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.userId!;
+    // If email is missing from request, we fetch it once from the DB
+    let userEmail = req.userEmail;
+    if (!userEmail) {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      userEmail = user?.email;
+    }
+
     const meetings = await prisma.scheduledMeeting.findMany({
       where: {
         OR: [
-          { creatorId: req.userId! },
-          { attendees: { has: req.userEmail } }, // Note: you might need to add email to AuthRequest
+          { creatorId: userId },
+          ...(userEmail ? [{ attendees: { has: userEmail } }] : []),
         ],
       },
       include: { room: { select: { name: true } } },

@@ -16,6 +16,7 @@ import userRouter from "./routes/auth.routes";
 import roomsRouter from "./routes/rooms.index.routes";
 import internalRouter from "./routes/internal.routes";
 import planningRouter from "./routes/planning.routes";
+import taskRouter from "./routes/tasks.routes";
 
 const app: express.Application = express();
 
@@ -54,6 +55,9 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 
+import passport from "./infra/passport";
+app.use(passport.initialize());
+
 // 2. Global Rate Limiting
 app.use(generalRateLimitMiddleware);
 
@@ -81,6 +85,7 @@ app.get("/health", async (_req, res) => {
 app.use("/api/v1/auth", userRouter);
 app.use("/api/v1/rooms", roomsRouter);
 app.use("/api/v1/planning", planningRouter);
+app.use("/api/v1/tasks", taskRouter);
 app.use("/api/internal", internalRouter);
 
 export { app };

@@ -9,6 +9,8 @@ import {
   generateAccessToken,
   verifyEmail,
   resendVerification,
+  testerLogin,
+  getProfile,
 } from "../controller/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import {
@@ -101,5 +103,26 @@ router.post("/logout", logout);
 router.post("/logout-all", authMiddleware, logoutAll);
 router.get("/sessions", authMiddleware, sessions);
 router.delete("/sessions/:sessionId", authMiddleware, deleteSession);
+
+router.post("/tester", testerLogin);
+router.get("/me", authMiddleware, getProfile);
+
+// ── OAuth Routes ──
+import passport from "../infra/passport";
+import { oauthCallbackHandler } from "../controller/oauth.controller";
+
+router.get("/google", passport.authenticate("google", { session: false }));
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: "/auth/signin" }),
+  oauthCallbackHandler,
+);
+
+router.get("/github", passport.authenticate("github", { session: false }));
+router.get(
+  "/github/callback",
+  passport.authenticate("github", { session: false, failureRedirect: "/auth/signin" }),
+  oauthCallbackHandler,
+);
 
 export default router;

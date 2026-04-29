@@ -13,8 +13,12 @@ datasource db {
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
-  password  String
+  password  String?  // Optional for OAuth-only users
   createdAt DateTime @default(now())
+
+  googleId  String?  @unique
+  githubId  String?  @unique
+  avatarUrl String?
 
   isVerified      Boolean  @default(false)
   verificationToken String?
@@ -25,6 +29,7 @@ model User {
   ownedRooms    Room[] @relation("RoomCreator")
   joinRequests  JoinRequest[]
   scheduledMeetings ScheduledMeeting[] @relation("MeetingCreator")
+  tasks         Task[]
 }
 
 model RefreshToken {
@@ -68,6 +73,7 @@ model Room {
   sessionChunks       SessionChunk[]
   sessionSummary      SessionSummary?
   scheduledMeetings   ScheduledMeeting[]
+  tasks               Task[]
 
   @@index([createdBy])
 }
@@ -269,6 +275,38 @@ model ScheduledMeeting {
   @@index([startTime])
   @@index([roomId])
   @@index([creatorId])
+}
+
+model Task {
+  id        String   @id @default(uuid())
+  title     String
+  status    TaskStatus @default(TODO)
+  priority  Priority @default(MEDIUM)
+  dueDate   DateTime?
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  roomId    String?
+  room      Room?    @relation(fields: [roomId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([roomId])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum JoinRequestStatus {

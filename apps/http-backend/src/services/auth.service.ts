@@ -94,6 +94,13 @@ export class AuthService {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) throw new ApiError(401, "Invalid email or password");
 
+    if (!user.password) {
+      throw new ApiError(
+        401,
+        "This account uses social login. Please sign in with Google or GitHub.",
+      );
+    }
+
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) throw new ApiError(401, "Invalid email or password");
 
@@ -108,6 +115,66 @@ export class AuthService {
         id: user.id,
         email: user.email,
         isVerified: user.isVerified,
+      },
+    };
+  }
+
+  async upsertOAuthUser(profile: {
+    email: string;
+    provider: "google" | "github";
+    providerId: string;
+    avatarUrl?: string;
+  }) {
+    let user = await prisma.user.findUnique({ where: { email: profile.email } });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: profile.email,
+          isVerified: true,
+          avatarUrl: profile.avatarUrl,
+          [profile.provider === "google" ? "googleId" : "githubId"]:
+            profile.providerId,
+        },
+      });
+    } else {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          [profile.provider === "google" ? "googleId" : "githubId"]:
+            profile.providerId,
+          avatarUrl: user.avatarUrl || profile.avatarUrl,
+          isVerified: true,
+        },
+      });
+    }
+    return user;
+  }
+
+  async getOrCreateTesterUser(req: any) {
+    let user = await prisma.user.findUnique({
+      where: { email: "tester@pencil.io" },
+    });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: "tester@pencil.io",
+          isVerified: true,
+        },
+      });
+    }
+
+    const accessToken = signAccessToken(user.id);
+    const refreshToken = await createSession(user.id, req);
+
+    return {
+      userId: user.id,
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        isVerified: true,
       },
     };
   }
@@ -180,6 +247,21 @@ export class AuthService {
     });
     if (!session) throw new ApiError(404, "Session not found");
     await prisma.refreshToken.delete({ where: { id: sessionId } });
+  }
+
+  async getProfile(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        isVerified: true,
+        avatarUrl: true,
+        createdAt: true,
+      },
+    });
+    if (!user) throw new ApiError(404, "User not found");
+    return user;
   }
 }
 

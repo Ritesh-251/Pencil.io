@@ -14,6 +14,11 @@ const REFRESH_TOKEN_COOKIE_OPTIONS = {
 
 function setRefreshTokenCookie(res: Response, token: string) {
   res.cookie("refreshToken", token, REFRESH_TOKEN_COOKIE_OPTIONS);
+  // Set a non-httpOnly marker so the frontend knows a session exists
+  res.cookie("has_session", "true", {
+    ...REFRESH_TOKEN_COOKIE_OPTIONS,
+    httpOnly: false,
+  });
 }
 
 export const signup = async (req: Request, res: Response) => {
@@ -69,7 +74,15 @@ export const signin = async (req: Request, res: Response) => {
     );
 
     setRefreshTokenCookie(res, refreshToken);
-    return res.status(200).json({ userId, accessToken });
+    return res.status(200).json({
+      userId,
+      accessToken,
+      user: {
+        id: userId,
+        email,
+        isVerified: true,
+      },
+    });
   } catch (error: any) {
     logger.error(
       { err: error.message, email: req.body?.email },
@@ -165,5 +178,33 @@ export const logoutAll = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({ message: "Logged out from all devices" });
   } catch (error: any) {
     return res.status(500).json({ message: "Internal server error" });
+  }
+};
+export const testerLogin = async (req: Request, res: Response) => {
+  try {
+    if (process.env.ALLOW_TESTER_LOGIN !== "true") {
+      return res.status(403).json({ message: "Tester login is disabled in this environment." });
+    }
+    const { userId, accessToken, refreshToken, user } =
+      await authService.getOrCreateTesterUser(req);
+
+    setRefreshTokenCookie(res, refreshToken);
+    return res.status(200).json({ userId, accessToken, user });
+  } catch (error) {
+    logger.error({ err: (error as any).message }, "tester login failed");
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+export const getProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await authService.getProfile(req.userId!);
+    return res.status(200).json({ user });
+  } catch (error: any) {
+    logger.error({ err: error.message }, "getProfile failed");
+    const status = error instanceof ApiError ? error.statusCode : 500;
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };

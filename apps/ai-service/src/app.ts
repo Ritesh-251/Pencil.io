@@ -2,8 +2,12 @@ import cors from "cors";
 import express from "express";
 import aiRouter from "./ai.routes";
 import { rabbitClient } from "./infra/rabbitmq";
+import { internalAuthMiddleware } from "./middleware/internalAuth.middleware";
+import { traceMiddleware } from "./middleware/trace.middleware";
 
 const app: express.Application = express();
+
+app.use(traceMiddleware);
 
 const fallbackLocalOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
 
@@ -42,6 +46,6 @@ app.get("/health", (_req, res) => {
   });
 });
 
-app.use("/ai", aiRouter);
+app.use("/ai", internalAuthMiddleware, aiRouter);
 
 export { app };

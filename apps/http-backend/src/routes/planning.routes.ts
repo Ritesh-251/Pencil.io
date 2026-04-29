@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { scheduleMeeting, getMyMeetings, deleteMeeting } from "../controller/planning.controller";
+import {
+  scheduleMeeting,
+  getMyMeetings,
+  deleteMeeting,
+} from "../controller/planning.controller";
 
 const router: Router = Router();
 

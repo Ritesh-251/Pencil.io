@@ -20,6 +20,11 @@ export const generalRateLimitMiddleware = rateLimit({
   store,
   handler: (req, res, _next, options) => {
     logger.warn({ path: req.path, ip: req.ip }, "General rate limit exceeded");
-    res.status(429).json({ message: "Too many requests, please try again later.", retryAfterMs: options.windowMs });
+    res
+      .status(429)
+      .json({
+        message: "Too many requests, please try again later.",
+        retryAfterMs: options.windowMs,
+      });
   },
 });

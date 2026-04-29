@@ -56,12 +56,15 @@ export const kickUser = async function (req: AuthRequest, res: Response) {
       });
     }
 
-    logger.error({
-      err: error,
-      requesterId: req.userId,
-      roomId: req.params.roomId,
-      targetUserId: req.params.userId,
-    }, "kickUser failed")
+    logger.error(
+      {
+        err: error,
+        requesterId: req.userId,
+        roomId: req.params.roomId,
+        targetUserId: req.params.userId,
+      },
+      "kickUser failed",
+    );
 
     return res.status(500).json({
       message: "Internal server error",
@@ -116,12 +119,15 @@ export const promoteUser = async function (req: AuthRequest, res: Response) {
       });
     }
 
-    logger.error({
-      err: error,
-      requesterId: req.userId,
-      roomId: req.params.roomId,
-      targetUserId: req.params.userId,
-    }, "promoteUser failed")
+    logger.error(
+      {
+        err: error,
+        requesterId: req.userId,
+        roomId: req.params.roomId,
+        targetUserId: req.params.userId,
+      },
+      "promoteUser failed",
+    );
     return res.status(500).json({
       message: "Internal server error",
     });

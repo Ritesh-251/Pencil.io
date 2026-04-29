@@ -20,7 +20,10 @@ function getRequiredEnv(name: string) {
   return value;
 }
 
-function buildParticipantName(email: string | null | undefined, userId: string) {
+function buildParticipantName(
+  email: string | null | undefined,
+  userId: string,
+) {
   if (email && email.includes("@")) {
     return email.split("@")[0] || `user-${userId.slice(0, 8)}`;
   }
@@ -51,43 +54,66 @@ export async function ensureTranscriptionAgentDispatch(input: {
   const host = toHttpLivekitHost(input.livekitUrl);
   const client = new AgentDispatchClient(host, input.apiKey, input.apiSecret);
 
-  logger.info({ roomId: input.roomId, host, agentName }, "Ensuring transcription dispatch");
+  logger.info(
+    { roomId: input.roomId, host, agentName },
+    "Ensuring transcription dispatch",
+  );
 
   let existing;
   try {
     existing = await client.listDispatch(input.roomId);
   } catch (error) {
-    logger.error({ err: error, roomId: input.roomId }, "Failed to list transcription dispatches");
+    logger.error(
+      { err: error, roomId: input.roomId },
+      "Failed to list transcription dispatches",
+    );
     throw error;
   }
 
   // Remove existing dispatches for this agent to force a fresh join attempt
   const ourDispatches = existing.filter(
-    (dispatch) => (dispatch.agentName || "").trim() === agentName || !(dispatch.agentName || "").trim(),
+    (dispatch) =>
+      (dispatch.agentName || "").trim() === agentName ||
+      !(dispatch.agentName || "").trim(),
   );
   for (const dispatch of ourDispatches) {
     try {
       await client.deleteDispatch(dispatch.id, input.roomId);
-      logger.info({
-        roomId: input.roomId,
-        dispatchId: dispatch.id,
-      }, "Cleared existing/stale transcription dispatch");
+      logger.info(
+        {
+          roomId: input.roomId,
+          dispatchId: dispatch.id,
+        },
+        "Cleared existing/stale transcription dispatch",
+      );
     } catch (error) {
-      logger.warn({
-        err: error,
-        roomId: input.roomId,
-        dispatchId: dispatch.id,
-      }, "Failed to clear existing transcription dispatch");
+      logger.warn(
+        {
+          err: error,
+          roomId: input.roomId,
+          dispatchId: dispatch.id,
+        },
+        "Failed to clear existing transcription dispatch",
+      );
     }
   }
 
   try {
     await client.createDispatch(input.roomId, agentName, {
-      metadata: JSON.stringify({ source: "media-token", createdAt: new Date().toISOString() }),
+      metadata: JSON.stringify({
+        source: "media-token",
+        createdAt: new Date().toISOString(),
+      }),
     });
-    logger.info({ roomId: input.roomId, agentName }, "Successfully created fresh transcription dispatch");
+    logger.info(
+      { roomId: input.roomId, agentName },
+      "Successfully created fresh transcription dispatch",
+    );
   } catch (error) {
-    logger.error({ err: error, roomId: input.roomId, agentName }, "Failed to create transcription dispatch");
+    logger.error(
+      { err: error, roomId: input.roomId, agentName },
+      "Failed to create transcription dispatch",
+    );
     throw error;
   }
 }
@@ -102,43 +128,60 @@ export async function stopTranscriptionAgentDispatch(input: {
   const host = toHttpLivekitHost(input.livekitUrl);
   const client = new AgentDispatchClient(host, input.apiKey, input.apiSecret);
 
-  logger.info({ roomId: input.roomId, host, agentName }, "Stopping transcription dispatch");
+  logger.info(
+    { roomId: input.roomId, host, agentName },
+    "Stopping transcription dispatch",
+  );
 
   let existing;
   try {
     existing = await client.listDispatch(input.roomId);
   } catch (error) {
-    logger.error({
-      err: error,
-      roomId: input.roomId,
-    }, "Failed to list transcription dispatches during stop");
+    logger.error(
+      {
+        err: error,
+        roomId: input.roomId,
+      },
+      "Failed to list transcription dispatches during stop",
+    );
     throw error;
   }
 
   const ourDispatches = existing.filter(
-    (dispatch) => (dispatch.agentName || "").trim() === agentName || !(dispatch.agentName || "").trim(),
+    (dispatch) =>
+      (dispatch.agentName || "").trim() === agentName ||
+      !(dispatch.agentName || "").trim(),
   );
 
   for (const dispatch of ourDispatches) {
     try {
       await client.deleteDispatch(dispatch.id, input.roomId);
-      logger.info({
-        roomId: input.roomId,
-        dispatchId: dispatch.id,
-      }, "Stopped transcription dispatch");
+      logger.info(
+        {
+          roomId: input.roomId,
+          dispatchId: dispatch.id,
+        },
+        "Stopped transcription dispatch",
+      );
     } catch (error) {
-      logger.warn({
-        err: error,
-        roomId: input.roomId,
-        dispatchId: dispatch.id,
-      }, "Failed to stop transcription dispatch");
+      logger.warn(
+        {
+          err: error,
+          roomId: input.roomId,
+          dispatchId: dispatch.id,
+        },
+        "Failed to stop transcription dispatch",
+      );
     }
   }
 
   return { stopped: ourDispatches.length };
 }
 
-export async function createMediaToken({ roomId, userId }: CreateMediaTokenInput) {
+export async function createMediaToken({
+  roomId,
+  userId,
+}: CreateMediaTokenInput) {
   const roomMember = await prisma.roomMember.findUnique({
     where: {
       userId_roomId: {

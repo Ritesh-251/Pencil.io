@@ -1,13 +1,13 @@
-import { prisma, SnapshotType } from "@repo/db"
-import { compressSnapshotData } from "./compress"
-import { isRecord } from "../utils/record.util"
+import { prisma, SnapshotType } from "@repo/db";
+import { compressSnapshotData } from "./compress";
+import { isRecord } from "../utils/record.util";
 
-type JsonRecord = Record<string, any>
+type JsonRecord = Record<string, any>;
 
 function readPatchProps(after: unknown): JsonRecord {
-  if (!isRecord(after)) return {}
-  if (!isRecord(after.props)) return {}
-  return after.props
+  if (!isRecord(after)) return {};
+  if (!isRecord(after.props)) return {};
+  return after.props;
 }
 
 export async function createDeltaSnapshot(
@@ -15,7 +15,7 @@ export async function createDeltaSnapshot(
   fromVersion: number,
   toVersion: number,
 ) {
-  if (toVersion <= fromVersion) return
+  if (toVersion <= fromVersion) return;
 
   const events = await prisma.canvasActionHistory.findMany({
     where: {
@@ -26,7 +26,7 @@ export async function createDeltaSnapshot(
       },
     },
     orderBy: [{ time: "asc" }, { actorId: "asc" }],
-  })
+  });
 
   const changes = events.map((event) => ({
     objectId: event.objectId,
@@ -34,7 +34,7 @@ export async function createDeltaSnapshot(
     version: event.version,
     actorId: event.actorId ?? event.userId,
     time: event.time ? Number(event.time) : event.version,
-  }))
+  }));
 
   await prisma.canvasSnapshot.create({
     data: {
@@ -45,5 +45,5 @@ export async function createDeltaSnapshot(
       data: compressSnapshotData({ changes }),
       createdAt: new Date(),
     },
-  })
+  });
 }

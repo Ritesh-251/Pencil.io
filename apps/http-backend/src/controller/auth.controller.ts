@@ -20,18 +20,33 @@ export const signup = async (req: Request, res: Response) => {
   try {
     const parsed = signupSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Validation error" });
+      return res
+        .status(400)
+        .json({
+          message: parsed.error.issues[0]?.message ?? "Validation error",
+        });
     }
 
     const { email, password } = parsed.data;
-    const { userId, accessToken, refreshToken } = await authService.signup(email, password, req);
+    const { userId, accessToken, refreshToken } = await authService.signup(
+      email,
+      password,
+      req,
+    );
 
     setRefreshTokenCookie(res, refreshToken);
-    return res.status(201).json({ message: "User signed up successfully", userId, accessToken });
+    return res
+      .status(201)
+      .json({ message: "User signed up successfully", userId, accessToken });
   } catch (error: any) {
-    logger.error({ err: error.message, email: req.body?.email }, "signup failed");
+    logger.error(
+      { err: error.message, email: req.body?.email },
+      "signup failed",
+    );
     const status = error instanceof ApiError ? error.statusCode : 500;
-    return res.status(status).json({ message: error.message || "Internal server error" });
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };
 
@@ -39,18 +54,31 @@ export const signin = async (req: Request, res: Response) => {
   try {
     const parsed = signinSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({ message: parsed.error.issues[0]?.message ?? "Validation error" });
+      return res
+        .status(400)
+        .json({
+          message: parsed.error.issues[0]?.message ?? "Validation error",
+        });
     }
 
     const { email, password } = parsed.data;
-    const { userId, accessToken, refreshToken } = await authService.signin(email, password, req);
+    const { userId, accessToken, refreshToken } = await authService.signin(
+      email,
+      password,
+      req,
+    );
 
     setRefreshTokenCookie(res, refreshToken);
     return res.status(200).json({ userId, accessToken });
   } catch (error: any) {
-    logger.error({ err: error.message, email: req.body?.email }, "signin failed");
+    logger.error(
+      { err: error.message, email: req.body?.email },
+      "signin failed",
+    );
     const status = error instanceof ApiError ? error.statusCode : 500;
-    return res.status(status).json({ message: error.message || "Internal server error" });
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };
 
@@ -58,12 +86,14 @@ export const verifyEmail = async (req: Request, res: Response) => {
   try {
     const token = String(req.query.token || "");
     if (!token) throw new ApiError(400, "Token is required");
-    
+
     const result = await authService.verifyEmail(token);
     return res.status(200).json(result);
   } catch (error: any) {
     const status = error instanceof ApiError ? error.statusCode : 500;
-    return res.status(status).json({ message: error.message || "Internal server error" });
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };
 
@@ -73,7 +103,9 @@ export const resendVerification = async (req: AuthRequest, res: Response) => {
     return res.status(200).json(result);
   } catch (error: any) {
     const status = error instanceof ApiError ? error.statusCode : 500;
-    return res.status(status).json({ message: error.message || "Internal server error" });
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };
 
@@ -87,7 +119,9 @@ export const generateAccessToken = async (req: Request, res: Response) => {
     return res.status(200).json({ accessToken: result.accessToken });
   } catch (error: any) {
     const status = error instanceof ApiError ? error.statusCode : 500;
-    return res.status(status).json({ message: error.message || "Internal server error" });
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };
 
@@ -107,7 +141,9 @@ export const deleteSession = async (req: AuthRequest, res: Response) => {
     return res.status(200).json({ message: "Session revoked successfully" });
   } catch (error: any) {
     const status = error instanceof ApiError ? error.statusCode : 404;
-    return res.status(status).json({ message: error.message || "Internal server error" });
+    return res
+      .status(status)
+      .json({ message: error.message || "Internal server error" });
   }
 };
 

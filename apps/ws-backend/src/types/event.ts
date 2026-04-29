@@ -3,10 +3,10 @@ export interface SocketEvent {
   payload?: any;
 }
 export type Event<T = any> = {
-  id: string
-  type: string
-  roomId: string
-  userId: string
-  timestamp: number
-  payload: T
-}
+  id: string;
+  type: string;
+  roomId: string;
+  userId: string;
+  timestamp: number;
+  payload: T;
+};

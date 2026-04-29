@@ -6,7 +6,8 @@ const options: swaggerJsdoc.Options = {
     info: {
       title: "Pencil.io API Documentation",
       version: "1.0.0",
-      description: "Comprehensive API documentation for the Pencil.io collaborative platform.",
+      description:
+        "Comprehensive API documentation for the Pencil.io collaborative platform.",
     },
     servers: [
       {

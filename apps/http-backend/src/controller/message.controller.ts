@@ -48,11 +48,14 @@ export const getMessages = async function (req: AuthRequest, res: Response) {
       });
     }
 
-    logger.error({
-      err: error,
-      userId: req.userId,
-      roomId: req.params.roomId,
-    }, "getMessages failed")
+    logger.error(
+      {
+        err: error,
+        userId: req.userId,
+        roomId: req.params.roomId,
+      },
+      "getMessages failed",
+    );
     return res.status(500).json({
       message: "Internal server error",
     });

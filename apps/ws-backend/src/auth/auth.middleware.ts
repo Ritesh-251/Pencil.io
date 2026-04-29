@@ -17,7 +17,7 @@ export function verifySocketToken(token: string) {
     }
     return userId;
   } catch (error) {
-    logger.error({ err: error }, "Socket auth verification failed")
-    throw error instanceof Error ? error : new Error("Invalid token")
+    logger.error({ err: error }, "Socket auth verification failed");
+    throw error instanceof Error ? error : new Error("Invalid token");
   }
 }

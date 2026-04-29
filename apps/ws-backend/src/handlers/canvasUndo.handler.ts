@@ -1,25 +1,28 @@
-import { BackpressureError, eventPublisher } from "../infra/eventPublisher"
-import { AuthenticatedSocket } from "../types/socket"
-import crypto from "crypto"
-import { generateHLC } from "../crdt/hlc"
-import { sendSocketCodedError, sendSocketError } from "../utils/socket.util"
-import { assertRoomMember, isRoomAccessDeniedError } from "../services/roomAccess.service"
+import { BackpressureError, eventPublisher } from "../infra/eventPublisher";
+import { AuthenticatedSocket } from "../types/socket";
+import crypto from "crypto";
+import { generateHLC } from "../crdt/hlc";
+import { sendSocketCodedError, sendSocketError } from "../utils/socket.util";
+import {
+  assertRoomMember,
+  isRoomAccessDeniedError,
+} from "../services/roomAccess.service";
 
 type CanvasUndoPayload = {
-  roomId: string
-}
+  roomId: string;
+};
 
 export async function handleCanvasUndo(
   socket: AuthenticatedSocket,
-  payload: CanvasUndoPayload
+  payload: CanvasUndoPayload,
 ) {
   if (!payload?.roomId) {
-    sendSocketError(socket, "roomId is required")
-    return
+    sendSocketError(socket, "roomId is required");
+    return;
   }
 
   try {
-    await assertRoomMember(socket.userId!, payload.roomId)
+    await assertRoomMember(socket.userId!, payload.roomId);
 
     await eventPublisher.publish({
       id: crypto.randomUUID(),
@@ -30,21 +33,26 @@ export async function handleCanvasUndo(
       payload: {
         timestamp: generateHLC(socket.userId!),
       },
-    })
+    });
   } catch (error) {
     if (isRoomAccessDeniedError(error)) {
-      sendSocketError(socket, "Not a member of this room")
-      return
+      sendSocketError(socket, "Not a member of this room");
+      return;
     }
 
     if (error instanceof BackpressureError) {
-      sendSocketCodedError(socket, "BACKPRESSURE", "System overloaded. Try again shortly.", {
-        retryAfterMs: 1000,
-        strategy: "retry-with-backoff-and-local-buffer",
-      })
-      return
+      sendSocketCodedError(
+        socket,
+        "BACKPRESSURE",
+        "System overloaded. Try again shortly.",
+        {
+          retryAfterMs: 1000,
+          strategy: "retry-with-backoff-and-local-buffer",
+        },
+      );
+      return;
     }
 
-    sendSocketError(socket, "Failed to queue undo")
+    sendSocketError(socket, "Failed to queue undo");
   }
 }

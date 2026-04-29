@@ -37,11 +37,14 @@ export async function issueRoomMediaToken(req: AuthRequest, res: Response) {
       });
     }
 
-    logger.error({
-      err: error,
-      userId: req.userId,
-      roomId: req.params.roomId,
-    }, "issueRoomMediaToken failed")
+    logger.error(
+      {
+        err: error,
+        userId: req.userId,
+        roomId: req.params.roomId,
+      },
+      "issueRoomMediaToken failed",
+    );
     return res.status(500).json({
       message: "Internal server error",
     });
@@ -83,7 +86,10 @@ export async function startTranscription(req: AuthRequest, res: Response) {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
-    logger.error({ err: error, roomId: req.params.roomId }, "startTranscription failed");
+    logger.error(
+      { err: error, roomId: req.params.roomId },
+      "startTranscription failed",
+    );
     return res.status(500).json({ message: "Internal server error" });
   }
 }
@@ -126,7 +132,10 @@ export async function stopTranscription(req: AuthRequest, res: Response) {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
-    logger.error({ err: error, roomId: req.params.roomId }, "stopTranscription failed");
+    logger.error(
+      { err: error, roomId: req.params.roomId },
+      "stopTranscription failed",
+    );
     return res.status(500).json({ message: "Internal server error" });
   }
 }

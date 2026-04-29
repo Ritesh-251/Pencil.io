@@ -13,6 +13,15 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export async function startEmailConsumer() {
   const channel = getChannel();
   const QUEUE = "email.queue";
@@ -32,7 +41,11 @@ export async function startEmailConsumer() {
       if (type === "VERIFY_EMAIL") {
         await sendVerificationEmail(payload.email, payload.token);
       } else if (type === "SESSION_SUMMARY") {
-        await sendSummaryEmail(payload.emails, payload.summary, payload.roomName);
+        await sendSummaryEmail(
+          payload.emails,
+          payload.summary,
+          payload.roomName,
+        );
       }
 
       channel.ack(msg);
@@ -46,7 +59,7 @@ export async function startEmailConsumer() {
 
 async function sendVerificationEmail(email: string, token: string) {
   const verificationLink = `${process.env.FRONTEND_URL}/verify?token=${token}`;
-  
+
   await transporter.sendMail({
     from: `"Pencil.io" <${process.env.SMTP_USER}>`,
     to: email,
@@ -62,11 +75,17 @@ async function sendVerificationEmail(email: string, token: string) {
       </div>
     `,
   });
-  
+
   logger.info({ email }, "Verification email sent");
 }
 
-async function sendSummaryEmail(emails: string[], summary: string, roomName: string) {
+async function sendSummaryEmail(
+  emails: string[],
+  summary: string,
+  roomName: string,
+) {
+  const safeRoomName = escapeHtml(roomName);
+  const safeSummary = escapeHtml(summary).replace(/\n/g, "<br/>");
   await transporter.sendMail({
     from: `"Pencil.io" <${process.env.SMTP_USER}>`,
     bcc: emails.join(", "),
@@ -74,14 +93,14 @@ async function sendSummaryEmail(emails: string[], summary: string, roomName: str
     html: `
       <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
         <h2 style="color: #4f46e5;">Session Highlights</h2>
-        <p>Here is the AI-generated summary of your recent session in <strong>${roomName}</strong>:</p>
+        <p>Here is the AI-generated summary of your recent session in <strong>${safeRoomName}</strong>:</p>
         <div style="background-color: #f8fafc; padding: 20px; border-radius: 6px; margin: 20px 0; line-height: 1.6;">
-          ${summary.replace(/\n/g, "<br/>")}
+          ${safeSummary}
         </div>
         <p style="font-size: 14px; color: #64748b;">Visit your dashboard to view the full activity log and canvas state.</p>
       </div>
     `,
   });
-  
+
   logger.info({ count: emails.length }, "Summary email sent to participants");
 }

@@ -1,12 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import { verifyToken } from "@repo/auth";
-import { prisma } from "@repo/db";
 
 export interface AuthRequest extends Request {
   userId?: string;
   userEmail?: string;
 }
 
+// SEC-2 FIX: The previous implementation made a database round-trip on every
+// authenticated request to verify the user still exists.  At scale (100 RPS)
+// that is 100 extra DB queries per second for no meaningful security benefit —
+// the JWT already proves identity and a deleted user's token remains valid until
+// the access-token TTL expires regardless.
+//
+// We now trust the JWT entirely.  If user-deletion revocation is required in the
+// future, maintain a Redis blocklist keyed on the token's `jti` claim.
 export async function authMiddleware(
   req: AuthRequest,
   res: Response,
@@ -37,21 +44,17 @@ export async function authMiddleware(
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    // Populate user info
-    const user = await prisma.user.findUnique({ 
-      where: { id: userId },
-      select: { id: true, email: true }
-    });
-
-    if (!user) {
-      return res.status(401).json({ message: "User not found" });
-    }
-
-    req.userId = user.id;
-    req.userEmail = user.email;
+    // Populate request with claims from the token — no DB round-trip needed.
+    req.userId = userId;
+    // userEmail is not in the standard JWT payload for this service; callers
+    // that need the email should fetch it from the DB in their own handler.
+    req.userEmail =
+      typeof (decoded as any).email === "string"
+        ? (decoded as any).email
+        : undefined;
 
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({ message: "Invalid token" });
   }
 }

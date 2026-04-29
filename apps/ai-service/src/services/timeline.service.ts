@@ -1,16 +1,33 @@
-import { prisma } from "@repo/db";
+import { Prisma, prisma } from "@repo/db";
 import crypto from "crypto";
 import { aiService } from "./ai.service";
-import { buildUnifiedTimeline, chunkTimeline, fetchTimelineData } from "../timeline";
+import {
+  buildUnifiedTimeline,
+  chunkTimeline,
+  fetchTimelineData,
+} from "../timeline";
 
 export class TimelineService {
+  private toVectorLiteral(values: number[]) {
+    if (!Array.isArray(values) || values.length === 0) {
+      throw new Error("embedding must be a non-empty number array");
+    }
+    for (const value of values) {
+      if (!Number.isFinite(value)) {
+        throw new Error("embedding contains a non-finite value");
+      }
+    }
+    return `[${values.join(",")}]`;
+  }
+
   async getRoomActivityCounts(roomId: string) {
-    const [canvasEvents, chatMessages, transcriptSegments, chunks] = await Promise.all([
-      prisma.canvasActionHistory.count({ where: { roomId } }),
-      prisma.message.count({ where: { roomId } }),
-      prisma.transcriptSegment.count({ where: { roomId } }),
-      prisma.sessionChunk.count({ where: { roomId } }),
-    ]);
+    const [canvasEvents, chatMessages, transcriptSegments, chunks] =
+      await Promise.all([
+        prisma.canvasActionHistory.count({ where: { roomId } }),
+        prisma.message.count({ where: { roomId } }),
+        prisma.transcriptSegment.count({ where: { roomId } }),
+        prisma.sessionChunk.count({ where: { roomId } }),
+      ]);
 
     return { canvasEvents, chatMessages, transcriptSegments, chunks };
   }
@@ -27,50 +44,43 @@ export class TimelineService {
       return { counts: { ...counts, chunks: 0 } };
     }
 
-    const embeddings = await Promise.all(
-      chunks.map((chunk) => aiService.embedText(chunk.content))
-    );
+    const embeddings: number[][] = [];
+    for (const chunk of chunks) {
+      const vector = await aiService.embedText(chunk.content);
+      embeddings.push(vector);
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.sessionChunk.deleteMany({ where: { roomId } });
 
-      const inserts = chunks.map((chunk, index) => {
-        const vectorLiteral = `[${embeddings[index]!.join(",")}]`;
-        return tx.$executeRawUnsafe(
-          `INSERT INTO "SessionChunk" ("id", "roomId", "content", "embedding", "startMs", "endMs", "createdAt")
-           VALUES ($1, $2, $3, $4::vector, $5, $6, NOW())`,
-          crypto.randomUUID(),
-          roomId,
-          chunk.content,
-          vectorLiteral,
-          chunk.startMs,
-          chunk.endMs,
+      for (const [index, chunk] of chunks.entries()) {
+        const vectorLiteral = this.toVectorLiteral(embeddings[index]!);
+        await tx.$executeRaw(
+          Prisma.sql`INSERT INTO "SessionChunk" ("id", "roomId", "content", "embedding", "startMs", "endMs", "createdAt")
+           VALUES (${crypto.randomUUID()}, ${roomId}, ${chunk.content}, ${vectorLiteral}::vector, ${chunk.startMs}, ${chunk.endMs}, NOW())`,
         );
-      });
-
-      await Promise.all(inserts);
+      }
     });
 
     return { counts: { ...counts, chunks: chunks.length } };
   }
 
   async retrieveChunks(roomId: string, questionEmbedding: number[], limit = 8) {
-    const vectorLiteral = `[${questionEmbedding.join(",")}]`;
-    return prisma.$queryRawUnsafe<any[]>(
-      `SELECT "id", "content", "startMs", "endMs",
-              (1 - ("embedding" <=> $1::vector)) AS "score"
-       FROM "SessionChunk"
-       WHERE "roomId" = $2
-         AND "embedding" IS NOT NULL
-       ORDER BY "embedding" <=> $1::vector
-       LIMIT $3`,
-      vectorLiteral,
-      roomId,
-      limit,
-    );
+    const vectorLiteral = this.toVectorLiteral(questionEmbedding);
+    return prisma.$queryRaw<any[]>`
+      SELECT "id", "content", "startMs", "endMs",
+             (1 - ("embedding" <=> ${vectorLiteral}::vector)) AS "score"
+      FROM "SessionChunk"
+      WHERE "roomId" = ${roomId}
+        AND "embedding" IS NOT NULL
+      ORDER BY "embedding" <=> ${vectorLiteral}::vector
+      LIMIT ${limit}
+    `;
   }
 
-  sourceTypeFromContent(content: string): "canvas" | "chat" | "speech" | "timeline" {
+  sourceTypeFromContent(
+    content: string,
+  ): "canvas" | "chat" | "speech" | "timeline" {
     if (content.includes("[canvas]")) return "canvas";
     if (content.includes("[chat]")) return "chat";
     if (content.includes("[speech]")) return "speech";
@@ -86,7 +96,10 @@ export class TimelineService {
       .slice(0, 4)
       .map((item) => item.content.replace(/\s+/g, " ").trim())
       .filter(Boolean)
-      .map((content, index) => `${index + 1}. ${content.slice(0, 220)}${content.length > 220 ? "..." : ""}`);
+      .map(
+        (content, index) =>
+          `${index + 1}. ${content.slice(0, 220)}${content.length > 220 ? "..." : ""}`,
+      );
 
     return [
       `Executive Summary (Room ${input.roomId})`,

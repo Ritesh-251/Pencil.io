@@ -11,7 +11,10 @@ import {
   resendVerification,
 } from "../controller/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
-import { authRateLimitMiddleware, refreshRateLimitMiddleware } from "../middleware/authRateLimit.middleware";
+import {
+  authRateLimitMiddleware,
+  refreshRateLimitMiddleware,
+} from "../middleware/authRateLimit.middleware";
 
 const router: Router = Router();
 

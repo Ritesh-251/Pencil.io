@@ -6,8 +6,12 @@ import { logger } from "../infra/logger";
 const WINDOW_MS = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 60_000);
 const MAX_REQUESTS = Number(process.env.AUTH_RATE_LIMIT_MAX || 20);
 
-const REFRESH_WINDOW_MS = Number(process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS || 60_000);
-const REFRESH_MAX_REQUESTS = Number(process.env.AUTH_REFRESH_RATE_LIMIT_MAX || 120);
+const REFRESH_WINDOW_MS = Number(
+  process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS || 60_000,
+);
+const REFRESH_MAX_REQUESTS = Number(
+  process.env.AUTH_REFRESH_RATE_LIMIT_MAX || 120,
+);
 
 // Redis store configurations
 const authStore = new RedisStore({
@@ -30,9 +34,11 @@ export const authRateLimitMiddleware = rateLimit({
   store: authStore,
   handler: (req, res, _next, options) => {
     logger.warn({ path: req.path, ip: req.ip }, "Auth rate limit exceeded");
-    res.status(429).json({ message: "Too many requests", retryAfterMs: options.windowMs });
+    res
+      .status(429)
+      .json({ message: "Too many requests", retryAfterMs: options.windowMs });
   },
-  skip: (req) => req.path.includes('/refresh'), 
+  skip: (req) => req.path.includes("/refresh"),
 });
 
 export const refreshRateLimitMiddleware = rateLimit({
@@ -43,6 +49,8 @@ export const refreshRateLimitMiddleware = rateLimit({
   store: refreshStore,
   handler: (req, res, _next, options) => {
     logger.warn({ path: req.path, ip: req.ip }, "Refresh rate limit exceeded");
-    res.status(429).json({ message: "Too many requests", retryAfterMs: options.windowMs });
+    res
+      .status(429)
+      .json({ message: "Too many requests", retryAfterMs: options.windowMs });
   },
 });

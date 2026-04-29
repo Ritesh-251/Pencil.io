@@ -35,9 +35,11 @@ rabbitClient.setTopology(async (channel: ConfirmChannel) => {
 });
 
 export const initRabbitMQ = () => rabbitClient.connect();
-export const onRabbitReady = (listener: () => void | Promise<void>) => rabbitClient.onReady(listener);
+export const onRabbitReady = (listener: () => void | Promise<void>) =>
+  rabbitClient.onReady(listener);
 export const getChannel = () => rabbitClient.getChannel();
 export const isRabbitMQHealthy = () => rabbitClient.getStatus().healthy;
+export const closeRabbitMQ = () => rabbitClient.close(); // Q-12
 
 export async function getQueueSize(queueName: string) {
   const result = await rabbitClient.getChannel().checkQueue(queueName);

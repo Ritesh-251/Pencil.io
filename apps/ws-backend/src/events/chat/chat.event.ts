@@ -1,19 +1,19 @@
-import crypto from "crypto"
-import { Event } from "../../types/event"
+import crypto from "crypto";
+import { Event } from "../../types/event";
 
 type ChatPayload = {
-  messageId: string
-  content: string
-}
+  messageId: string;
+  content: string;
+};
 
 export function createChatMessageEvent({
   roomId,
   userId,
   content,
 }: {
-  roomId: string
-  userId: string
-  content: string
+  roomId: string;
+  userId: string;
+  content: string;
 }): Event<ChatPayload> {
   return {
     id: crypto.randomUUID(),
@@ -25,5 +25,5 @@ export function createChatMessageEvent({
       messageId: crypto.randomUUID(),
       content,
     },
-  }
+  };
 }

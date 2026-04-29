@@ -1,18 +1,18 @@
-import { prisma } from "@repo/db"
-import { mergeCRDT, type CRDTObject } from "../crdt/merge"
-import { isRecord } from "../utils/record.util"
+import { prisma } from "@repo/db";
+import { mergeCRDT, type CRDTObject } from "../crdt/merge";
+import { isRecord } from "../utils/record.util";
 
 export type ReplayOptions = {
-  roomId: string
-  fromTime?: number
-  toTime?: number
-  toTimestamp?: number
-}
+  roomId: string;
+  fromTime?: number;
+  toTime?: number;
+  toTimestamp?: number;
+};
 
 function readPatch(after: unknown): Record<string, any> | null {
-  if (!isRecord(after)) return null
-  if (!isRecord(after.props)) return null
-  return after.props
+  if (!isRecord(after)) return null;
+  if (!isRecord(after.props)) return null;
+  return after.props;
 }
 
 export async function replayCanvas({
@@ -33,18 +33,18 @@ export async function replayCanvas({
         : {}),
     },
     orderBy: [{ time: "asc" }, { actorId: "asc" }],
-  })
+  });
 
-  const state = new Map<string, CRDTObject>()
+  const state = new Map<string, CRDTObject>();
 
   for (const event of events) {
-    if (!event.objectId) continue
-    if (!event.time || !event.actorId) continue
+    if (!event.objectId) continue;
+    if (!event.time || !event.actorId) continue;
 
-    const patch = readPatch(event.after)
-    if (!patch) continue
+    const patch = readPatch(event.after);
+    if (!patch) continue;
 
-    const existing = state.get(event.objectId) || null
+    const existing = state.get(event.objectId) || null;
 
     const merged = mergeCRDT(existing, {
       props: patch,
@@ -52,13 +52,13 @@ export async function replayCanvas({
         time: Number(event.time),
         actorId: event.actorId,
       },
-    })
+    });
 
-    state.set(event.objectId, merged)
+    state.set(event.objectId, merged);
   }
 
   return {
     state,
     events,
-  }
+  };
 }

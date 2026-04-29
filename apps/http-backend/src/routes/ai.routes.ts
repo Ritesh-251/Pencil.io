@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { prisma } from "@repo/db";
-import { authMiddleware, type AuthRequest } from "../middleware/auth.middleware";
+import {
+  authMiddleware,
+  type AuthRequest,
+} from "../middleware/auth.middleware";
 import { ApiError } from "../utils/ApiError";
 import { logger } from "../infra/logger";
 
@@ -35,6 +38,7 @@ async function proxyToAiService(path: string, init?: RequestInit) {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.INTERNAL_SECRET}`,
       ...(init?.headers ?? {}),
     },
   });
@@ -61,7 +65,10 @@ router.post("/ingest", authMiddleware, async (req: AuthRequest, res) => {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
-    logger.error({ err: error, roomId: req.params.roomId }, "AI ingest route failed")
+    logger.error(
+      { err: error, roomId: req.params.roomId },
+      "AI ingest route failed",
+    );
     return res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -75,22 +82,34 @@ router.post("/summary", authMiddleware, async (req: AuthRequest, res) => {
 
     await ensureRoomMembership(userId, roomId);
     const refresh = String(req.query.refresh || "").toLowerCase() === "true";
-    const includeTranscript = String(req.query.includeTranscript || "true").toLowerCase() !== "false";
+    const includeTranscript =
+      String(req.query.includeTranscript || "true").toLowerCase() !== "false";
     const queryParams = new URLSearchParams();
     if (refresh) queryParams.set("refresh", "true");
     if (!includeTranscript) queryParams.set("includeTranscript", "false");
-    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
-    const canvasImage = typeof req.body?.canvasImage === "string" ? req.body.canvasImage : undefined;
-    const result = await proxyToAiService(`/ai/${roomId}/summary${queryString}`, { 
-      method: "POST",
-      body: JSON.stringify({ canvasImage }),
-    });
+    const queryString = queryParams.toString()
+      ? `?${queryParams.toString()}`
+      : "";
+    const canvasImage =
+      typeof req.body?.canvasImage === "string"
+        ? req.body.canvasImage
+        : undefined;
+    const result = await proxyToAiService(
+      `/ai/${roomId}/summary${queryString}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ canvasImage }),
+      },
+    );
     return res.status(result.status).json(result.payload);
   } catch (error) {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
-    logger.error({ err: error, roomId: req.params.roomId }, "AI summary route failed")
+    logger.error(
+      { err: error, roomId: req.params.roomId },
+      "AI summary route failed",
+    );
     return res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -99,14 +118,18 @@ router.post("/query", authMiddleware, async (req: AuthRequest, res) => {
   try {
     const roomId = String(req.params.roomId || "").trim();
     const userId = req.userId;
-    const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+    const question =
+      typeof req.body?.question === "string" ? req.body.question.trim() : "";
     const includeTranscript = req.body?.includeTranscript !== false;
     if (!userId) throw new ApiError(401, "Unauthorized");
     if (!roomId) throw new ApiError(400, "Room ID required");
     if (!question) throw new ApiError(400, "Question is required");
 
     await ensureRoomMembership(userId, roomId);
-    const canvasImage = typeof req.body?.canvasImage === "string" ? req.body.canvasImage : undefined;
+    const canvasImage =
+      typeof req.body?.canvasImage === "string"
+        ? req.body.canvasImage
+        : undefined;
     const result = await proxyToAiService(`/ai/${roomId}/query`, {
       method: "POST",
       body: JSON.stringify({ question, includeTranscript, canvasImage }),
@@ -116,7 +139,10 @@ router.post("/query", authMiddleware, async (req: AuthRequest, res) => {
     if (error instanceof ApiError) {
       return res.status(error.statusCode).json({ message: error.message });
     }
-    logger.error({ err: error, roomId: req.params.roomId }, "AI query route failed")
+    logger.error(
+      { err: error, roomId: req.params.roomId },
+      "AI query route failed",
+    );
     return res.status(500).json({ message: "Internal server error" });
   }
 });

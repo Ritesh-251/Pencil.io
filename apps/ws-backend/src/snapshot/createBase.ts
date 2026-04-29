@@ -1,5 +1,5 @@
-import { prisma, SnapshotType } from "@repo/db"
-import { compressSnapshotData } from "./compress"
+import { prisma, SnapshotType } from "@repo/db";
+import { compressSnapshotData } from "./compress";
 
 export async function createBaseSnapshot(roomId: string, version: number) {
   const objects = await prisma.canvasObject.findMany({
@@ -13,7 +13,7 @@ export async function createBaseSnapshot(roomId: string, version: number) {
       time: true,
       actorId: true,
     },
-  })
+  });
 
   const normalizedObjects = objects.map((obj) => ({
     id: obj.id,
@@ -25,7 +25,7 @@ export async function createBaseSnapshot(roomId: string, version: number) {
             actorId: obj.actorId,
           }
         : null,
-  }))
+  }));
 
   await prisma.canvasSnapshot.create({
     data: {
@@ -36,5 +36,5 @@ export async function createBaseSnapshot(roomId: string, version: number) {
       data: compressSnapshotData({ objects: normalizedObjects }),
       createdAt: new Date(),
     },
-  })
+  });
 }

@@ -6,7 +6,10 @@ import {
   type TrackPublication,
 } from "livekit-client";
 import { api } from "./api";
-import type { MediaParticipantSnapshot, MediaStatus } from "@/store/media.store";
+import type {
+  MediaParticipantSnapshot,
+  MediaStatus,
+} from "@/store/media.store";
 
 type MediaTokenResponse = {
   token: string;
@@ -40,46 +43,53 @@ export function createMediaRoom() {
 
 // ─── Data-channel message types ───────────────────────────────────────────────
 
-export type DataMessageRaiseHand = { type: 'raise-hand'; raised: boolean };
-export type DataMessageReaction  = { type: 'reaction';   emoji: string };
+export type DataMessageRaiseHand = { type: "raise-hand"; raised: boolean };
+export type DataMessageReaction = { type: "reaction"; emoji: string };
 export type DataMessage = DataMessageRaiseHand | DataMessageReaction;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 export function publishRaiseHand(room: Room, raised: boolean) {
-  const msg: DataMessageRaiseHand = { type: 'raise-hand', raised };
-  void room.localParticipant.publishData(
-    encoder.encode(JSON.stringify(msg)),
-    { reliable: true },
-  );
+  const msg: DataMessageRaiseHand = { type: "raise-hand", raised };
+  void room.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), {
+    reliable: true,
+  });
 }
 
 export function publishReaction(room: Room, emoji: string) {
-  const msg: DataMessageReaction = { type: 'reaction', emoji };
-  void room.localParticipant.publishData(
-    encoder.encode(JSON.stringify(msg)),
-    { reliable: false },
-  );
+  const msg: DataMessageReaction = { type: "reaction", emoji };
+  void room.localParticipant.publishData(encoder.encode(JSON.stringify(msg)), {
+    reliable: false,
+  });
 }
 
 export function parseDataMessage(payload: Uint8Array): DataMessage | null {
   try {
     const parsed = JSON.parse(decoder.decode(payload)) as unknown;
-    if (typeof parsed === 'object' && parsed !== null && 'type' in parsed) {
+    if (typeof parsed === "object" && parsed !== null && "type" in parsed) {
       return parsed as DataMessage;
     }
-  } catch { /* ignore malformed */ }
+  } catch {
+    /* ignore malformed */
+  }
   return null;
 }
 
 export async function requestMediaToken(roomId: string) {
-  return api.post(`/api/v1/rooms/${roomId}/media/token`) as Promise<MediaTokenResponse>;
+  return api.post(
+    `/api/v1/rooms/${roomId}/media/token`,
+  ) as Promise<MediaTokenResponse>;
 }
 
-export function connectionStateToMediaStatus(state: ConnectionState): MediaStatus {
+export function connectionStateToMediaStatus(
+  state: ConnectionState,
+): MediaStatus {
   if (state === ConnectionState.Connected) return "connected";
-  if (state === ConnectionState.Reconnecting || state === ConnectionState.SignalReconnecting) {
+  if (
+    state === ConnectionState.Reconnecting ||
+    state === ConnectionState.SignalReconnecting
+  ) {
     return "reconnecting";
   }
   if (state === ConnectionState.Connecting) return "joining";
@@ -101,20 +111,31 @@ export function getParticipantMediaSnapshot(
   };
 }
 
-export function snapshotRoomParticipants(room: Room): MediaParticipantSnapshot[] {
+export function snapshotRoomParticipants(
+  room: Room,
+): MediaParticipantSnapshot[] {
   const participants: MediaParticipantSnapshot[] = [
-    getParticipantMediaSnapshot(room.localParticipant, room.localParticipant.identity, true),
+    getParticipantMediaSnapshot(
+      room.localParticipant,
+      room.localParticipant.identity,
+      true,
+    ),
   ];
 
   for (const [identity, participant] of room.remoteParticipants.entries()) {
-    participants.push(getParticipantMediaSnapshot(participant, identity, false));
+    participants.push(
+      getParticipantMediaSnapshot(participant, identity, false),
+    );
   }
 
   return participants;
 }
 
 export function getParticipantCameraPublication(participant: Participant) {
-  return readTrackPublication(participant.videoTrackPublications, Track.Source.Camera);
+  return readTrackPublication(
+    participant.videoTrackPublications,
+    Track.Source.Camera,
+  );
 }
 
 export function getParticipantCameraTrack(participant: Participant) {
@@ -123,7 +144,10 @@ export function getParticipantCameraTrack(participant: Participant) {
 }
 
 export function getParticipantScreenSharePublication(participant: Participant) {
-  return readTrackPublication(participant.videoTrackPublications, Track.Source.ScreenShare);
+  return readTrackPublication(
+    participant.videoTrackPublications,
+    Track.Source.ScreenShare,
+  );
 }
 
 export function getParticipantScreenShareTrack(participant: Participant) {

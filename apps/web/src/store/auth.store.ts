@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { setMemoryToken } from '../lib/api';
+import { create } from "zustand";
+import { setMemoryToken } from "../lib/api";
 
 // ─── Shared in-memory token ref (set by api.ts, read by api.ts) ──────────────
 // The access token lives ONLY in memory — never in localStorage.
@@ -7,24 +7,30 @@ import { setMemoryToken } from '../lib/api';
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface AuthState {
-  user: { id: string; username: string; email: string; isVerified?: boolean } | null;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    isVerified?: boolean;
+  } | null;
   token: string | null;
   setAuth: (user: any, token: string) => void;
-  updateUser: (data: Partial<NonNullable<AuthState['user']>>) => void;
+  setToken: (token: string | null) => void;
+  updateUser: (data: Partial<NonNullable<AuthState["user"]>>) => void;
   clearToken: () => void;
   logout: () => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function loadStoredUser(): AuthState['user'] {
-  if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem('user');
-  if (!raw || raw === 'undefined' || raw === 'null') return null;
+function loadStoredUser(): AuthState["user"] {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem("user");
+  if (!raw || raw === "undefined" || raw === "null") return null;
   try {
     return JSON.parse(raw);
   } catch {
-    localStorage.removeItem('user');
+    localStorage.removeItem("user");
     return null;
   }
 }
@@ -38,9 +44,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
 
   setAuth: (user, token) => {
-    if (typeof window === 'undefined' || !token || token === 'undefined') return;
+    if (typeof window === "undefined" || !token || token === "undefined")
+      return;
     // Persist non-sensitive user metadata so the UI loads fast on reload.
-    localStorage.setItem('user', JSON.stringify(user));
+    if (user) localStorage.setItem("user", JSON.stringify(user));
     // Mark that a session exists so api.ts knows to attempt a silent refresh.
     document.cookie = `has_session=true; path=/; max-age=604800; SameSite=Lax`;
     // Token stays in memory only — never touches localStorage.
@@ -48,40 +55,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user, token });
   },
 
+  setToken: (token) => {
+    setMemoryToken(token);
+    set({ token });
+  },
+
   updateUser: (data) => {
     const user = get().user;
     if (!user) return;
     const newUser = { ...user, ...data };
-    localStorage.setItem('user', JSON.stringify(newUser));
+    localStorage.setItem("user", JSON.stringify(newUser));
     set({ user: newUser });
   },
 
   // Called by api.ts when a silent refresh succeeds on page reload.
   clearToken: () => {
+    setMemoryToken(null);
     set({ token: null });
   },
 
   logout: () => {
-    localStorage.removeItem('user');
+    localStorage.removeItem("user");
     // Expire the session marker cookie.
     document.cookie = `has_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
     setMemoryToken(null);
     set({ user: null, token: null });
-    window.location.href = '/auth/signin';
+    window.location.href = "/auth/signin";
   },
 }));
 
 // ─── Connection Store ─────────────────────────────────────────────────────────
 
 interface ConnectionState {
-  status: 'connecting' | 'connected' | 'disconnected';
+  status: "connecting" | "connected" | "disconnected";
   syncing: boolean;
-  setStatus: (s: 'connecting' | 'connected' | 'disconnected') => void;
+  setStatus: (s: "connecting" | "connected" | "disconnected") => void;
   setSyncing: (s: boolean) => void;
 }
 
 export const useConnectionStore = create<ConnectionState>((set) => ({
-  status: 'disconnected',
+  status: "disconnected",
   syncing: false,
   setStatus: (status) => set({ status }),
   setSyncing: (syncing) => set({ syncing }),

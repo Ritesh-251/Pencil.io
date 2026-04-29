@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { WSClient } from '@/lib/ws';
-import { useParams } from 'next/navigation';
-import { useAuthStore, useConnectionStore } from '@/store/auth.store';
+import { useEffect, useRef, useState } from "react";
+import { WSClient } from "@/lib/ws";
+import { useParams } from "next/navigation";
+import { useAuthStore, useConnectionStore } from "@/store/auth.store";
 
 type ChatMessage = {
   id: string;
@@ -15,16 +15,34 @@ type ChatMessage = {
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
 const IconSend = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     <line x1="22" y1="2" x2="11" y2="13" />
     <polygon points="22 2 15 22 11 13 2 9 22 2" />
   </svg>
 );
 
 const IconChat = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg
+    width="13"
+    height="13"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
   </svg>
 );
@@ -44,7 +62,10 @@ const TypingIndicator = () => (
 
 // Format a timestamp as "HH:MM"
 function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export const ChatPanel = () => {
@@ -52,14 +73,14 @@ export const ChatPanel = () => {
   const roomId = params?.roomId;
   const user = useAuthStore((s) => s.user);
   const status = useConnectionStore((s) => s.status);
-  const [text, setText] = useState('');
+  const [text, setText] = useState("");
   const [typing, setTyping] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: 'seed-1',
-      text: 'Welcome to the room. Start sketching your idea.',
-      author: 'System',
+      id: "seed-1",
+      text: "Welcome to the room. Start sketching your idea.",
+      author: "System",
       createdAt: Date.now() - 15000,
     },
   ]);
@@ -75,11 +96,11 @@ export const ChatPanel = () => {
     e.preventDefault();
     if (!text.trim() || !roomId) return;
     if (!WSClient.getInstance().isConnected()) {
-      setSendError('Realtime connection is not ready yet.');
+      setSendError("Realtime connection is not ready yet.");
       return;
     }
-    WSClient.getInstance().send('chat:send', { roomId, content: text.trim() });
-    setText('');
+    WSClient.getInstance().send("chat:send", { roomId, content: text.trim() });
+    setText("");
     setTyping(false);
     setSendError(null);
   };
@@ -87,7 +108,7 @@ export const ChatPanel = () => {
   useEffect(() => {
     const ws = WSClient.getInstance();
 
-    const offNew = ws.on('chat:new', (payload) => {
+    const offNew = ws.on("chat:new", (payload) => {
       if (!payload?.content) return;
       const messageId =
         payload.messageId ||
@@ -102,36 +123,36 @@ export const ChatPanel = () => {
                 text: payload.content,
                 author:
                   payload.userId && payload.userId === user?.id
-                    ? 'You'
+                    ? "You"
                     : payload.userId
-                    ? `User ${String(payload.userId).slice(0, 6)}`
-                    : 'Collaborator',
+                      ? `User ${String(payload.userId).slice(0, 6)}`
+                      : "Collaborator",
                 createdAt: payload.timestamp ?? Date.now(),
               },
             ],
       );
     });
 
-    const offHistory = ws.on('chat:history', (payload) => {
+    const offHistory = ws.on("chat:history", (payload) => {
       const history = Array.isArray(payload?.messages) ? payload.messages : [];
       const normalized = history.map((item: any) => ({
         id: item.id,
         text: item.content,
         author:
           item.userId === user?.id
-            ? 'You'
+            ? "You"
             : item.userId
-            ? `User ${String(item.userId).slice(0, 6)}`
-            : 'Collaborator',
+              ? `User ${String(item.userId).slice(0, 6)}`
+              : "Collaborator",
         createdAt: new Date(item.createdAt).getTime(),
       }));
       setMessages((prev) => {
-        const seeded = prev.filter((m) => m.id.startsWith('seed-'));
+        const seeded = prev.filter((m) => m.id.startsWith("seed-"));
         return normalized.length > 0 ? normalized : seeded;
       });
     });
 
-    const offError = ws.on('error', (payload) => {
+    const offError = ws.on("error", (payload) => {
       if (payload?.message) setSendError(payload.message);
     });
 
@@ -176,12 +197,10 @@ export const ChatPanel = () => {
     return acc;
   }, []);
 
-  const isConnected = status === 'connected';
+  const isConnected = status === "connected";
 
   return (
     <div className="glass flex h-full flex-col overflow-hidden rounded-[20px]">
-
-      {/* ── Panel header ──────────────────────────────────────────────────── */}
       <div className="panel-header">
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[rgba(13,91,215,.12)] text-[var(--brand)]">
@@ -201,21 +220,23 @@ export const ChatPanel = () => {
         </div>
       </div>
 
-      {/* ── Scrollable message area ────────────────────────────────────── */}
       <div
         ref={scrollRef}
         className="scroll-thin min-h-0 flex-1 overflow-y-auto px-3 py-3"
       >
         <div className="flex flex-col gap-3">
           {grouped.map((group, i) => {
-            const isSelf = group.author === 'You';
-            const isSystem = group.author === 'System';
+            const isSelf = group.author === "You";
+            const isSystem = group.author === "System";
 
             if (isSystem) {
               return (
-                <div key={`${group.author}-${i}`} className="flex justify-center">
+                <div
+                  key={`${group.author}-${i}`}
+                  className="flex justify-center"
+                >
                   <div className="bubble-system animate-fade">
-                    {group.messages.map((m) => m.text).join(' ')}
+                    {group.messages.map((m) => m.text).join(" ")}
                   </div>
                 </div>
               );
@@ -224,8 +245,11 @@ export const ChatPanel = () => {
             return (
               <div
                 key={`${group.author}-${i}`}
-                className={`flex flex-col gap-1 ${isSelf ? 'items-end' : 'items-start'}`}
-                style={{ animation: 'slideInUp 220ms cubic-bezier(0.2,0.86,0.2,1) both' }}
+                className={`flex flex-col gap-1 ${isSelf ? "items-end" : "items-start"}`}
+                style={{
+                  animation:
+                    "slideInUp 220ms cubic-bezier(0.2,0.86,0.2,1) both",
+                }}
               >
                 {/* Author label */}
                 {!isSelf && (
@@ -235,14 +259,18 @@ export const ChatPanel = () => {
                 )}
 
                 {/* Message bubbles */}
-                <div className={`flex flex-col gap-1 ${isSelf ? 'items-end' : 'items-start'}`}>
+                <div
+                  className={`flex flex-col gap-1 ${isSelf ? "items-end" : "items-start"}`}
+                >
                   {group.messages.map((m) => (
                     <div key={m.id} className="group relative">
-                      <div className={isSelf ? 'bubble-self' : 'bubble-other'}>
+                      <div className={isSelf ? "bubble-self" : "bubble-other"}>
                         {m.text}
                       </div>
                       {/* Timestamp on hover */}
-                      <span className={`pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap text-[0.62rem] text-[var(--ink-soft)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 ${isSelf ? 'right-[calc(100%+6px)]' : 'left-[calc(100%+6px)]'}`}>
+                      <span
+                        className={`pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap text-[0.62rem] text-[var(--ink-soft)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 ${isSelf ? "right-[calc(100%+6px)]" : "left-[calc(100%+6px)]"}`}
+                      >
                         {formatTime(m.createdAt)}
                       </span>
                     </div>
@@ -263,21 +291,21 @@ export const ChatPanel = () => {
         </div>
       </div>
 
-      {/* ── Error banner ──────────────────────────────────────────────────── */}
       {sendError && (
         <div className="mx-2.5 mb-1 rounded-xl border border-[rgba(172,56,48,.24)] bg-[rgba(172,56,48,.1)] px-3 py-1.5 text-[0.75rem] text-[#8c2317]">
           {sendError}
         </div>
       )}
 
-      {/* ── Send bar ──────────────────────────────────────────────────────── */}
-      <form onSubmit={send}
-        className="flex items-center gap-2 border-t border-[var(--border-subtle)] p-2.5">
+      <form
+        onSubmit={send}
+        className="flex items-center gap-2 border-t border-[var(--border-subtle)] p-2.5"
+      >
         <input
           className="input flex-1 rounded-[14px] py-2.5 text-[0.9rem]"
           value={text}
           onChange={(e) => onType(e.target.value)}
-          placeholder={isConnected ? 'Message collaborators…' : 'Reconnecting…'}
+          placeholder={isConnected ? "Message collaborators…" : "Reconnecting…"}
           disabled={!isConnected}
           autoComplete="off"
         />

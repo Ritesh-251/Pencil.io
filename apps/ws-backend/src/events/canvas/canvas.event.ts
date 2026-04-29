@@ -1,8 +1,8 @@
 // src/events/canvas.event.ts
 
-import crypto from "crypto"
-import { CanvasAction,CanvasObjectEvent } from "./canvas.types"
-import { generateHLC } from "../../crdt/hlc"
+import crypto from "crypto";
+import { CanvasAction, CanvasObjectEvent } from "./canvas.types";
+import { generateHLC } from "../../crdt/hlc";
 
 export function createCanvasObjectEvent({
   roomId,
@@ -12,12 +12,12 @@ export function createCanvasObjectEvent({
   data,
   baseVersion,
 }: {
-  roomId: string
-  userId: string
-  objectId: string
-  type: CanvasAction
-  data: any
-  baseVersion?: number
+  roomId: string;
+  userId: string;
+  objectId: string;
+  type: CanvasAction;
+  data: any;
+  baseVersion?: number;
 }): CanvasObjectEvent {
   return {
     id: crypto.randomUUID(),
@@ -32,5 +32,5 @@ export function createCanvasObjectEvent({
       timestamp: generateHLC(userId),
       baseVersion,
     },
-  }
+  };
 }

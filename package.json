@@ -7,7 +7,7 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "test": "vitest"
+    "test": "vitest run $(find packages apps -path '*/src/*.test.ts' -o -path '*/src/**/*.test.ts')"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.5",

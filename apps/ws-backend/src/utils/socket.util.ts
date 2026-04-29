@@ -1,4 +1,4 @@
-import { AuthenticatedSocket } from "../types/socket"
+import { AuthenticatedSocket } from "../types/socket";
 
 export function sendSocketError(
   socket: AuthenticatedSocket,
@@ -14,7 +14,7 @@ export function sendSocketError(
         ...(extra || {}),
       },
     }),
-  )
+  );
 }
 
 export function sendSocketCodedError(
@@ -26,5 +26,5 @@ export function sendSocketCodedError(
   sendSocketError(socket, message, {
     code,
     ...(extra || {}),
-  })
+  });
 }

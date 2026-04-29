@@ -28,28 +28,28 @@ export class RedisPubSub {
       throw new Error("REDIS_URL is not defined");
     }
 
-    const retryStrategy = (times: number) => Math.min(times * 200, 5000)
+    const retryStrategy = (times: number) => Math.min(times * 200, 5000);
 
     this.pub = new Redis(redisUrl, { retryStrategy });
     this.sub = new Redis(redisUrl, { retryStrategy });
 
     this.pub.on("connect", () => {
       logger.info({ serverId: this.serverId }, "Publisher connected");
-      this.healthy = true
+      this.healthy = true;
     });
 
     this.sub.on("connect", () => {
       logger.info({ serverId: this.serverId }, "Subscriber connected");
-      this.healthy = true
+      this.healthy = true;
     });
 
     this.pub.on("error", (err) => {
-      this.healthy = false
+      this.healthy = false;
       logger.error({ err, serverId: this.serverId }, "Publisher error");
     });
 
     this.sub.on("error", (err) => {
-      this.healthy = false
+      this.healthy = false;
       logger.error({ err, serverId: this.serverId }, "Subscriber error");
     });
 
@@ -57,7 +57,7 @@ export class RedisPubSub {
   }
 
   isHealthy() {
-    return this.healthy
+    return this.healthy;
   }
 
   async publish(event: Omit<WSRedisEvent, "origin">) {
@@ -73,32 +73,39 @@ export class RedisPubSub {
     try {
       await this.pub.publish(RedisPubSub.CHANNEL, JSON.stringify(fullEvent));
     } catch (err) {
-      logger.error({
-        err,
-        event: fullEvent,
-        serverId: this.serverId
-      }, "publish failed");
+      logger.error(
+        {
+          err,
+          event: fullEvent,
+          serverId: this.serverId,
+        },
+        "publish failed",
+      );
     }
   }
 
-  async tryAcquireLock(key: string, value: string, ttlMs: number): Promise<boolean> {
+  async tryAcquireLock(
+    key: string,
+    value: string,
+    ttlMs: number,
+  ): Promise<boolean> {
     if (!this.pub) {
-      throw new Error("RedisPubSub not connected. Call connect() first.")
+      throw new Error("RedisPubSub not connected. Call connect() first.");
     }
 
-    const result = await this.pub.set(key, value, "PX", ttlMs, "NX")
-    return result === "OK"
+    const result = await this.pub.set(key, value, "PX", ttlMs, "NX");
+    return result === "OK";
   }
 
   async releaseLock(key: string, value: string): Promise<boolean> {
     if (!this.pub) {
-      throw new Error("RedisPubSub not connected. Call connect() first.")
+      throw new Error("RedisPubSub not connected. Call connect() first.");
     }
 
     const script =
-      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
-    const deleted = await this.pub.eval(script, 1, key, value)
-    return deleted === 1
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+    const deleted = await this.pub.eval(script, 1, key, value);
+    return deleted === 1;
   }
 
   subscribe(handler: (event: WSRedisEvent) => void) {

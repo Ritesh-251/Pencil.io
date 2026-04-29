@@ -1,6 +1,5 @@
-import { prisma, SnapshotType } from "@repo/db"
-import { logger } from "../infra/logger"
-
+import { prisma, SnapshotType } from "@repo/db";
+import { logger } from "../infra/logger";
 
 export async function triggerSnapshot(roomId: string, version: number) {
   // async, non-blocking
@@ -17,7 +16,7 @@ export async function triggerSnapshot(roomId: string, version: number) {
           time: true,
           actorId: true,
         },
-      })
+      });
 
       const normalizedObjects = objects.map((obj) => ({
         id: obj.id,
@@ -29,7 +28,7 @@ export async function triggerSnapshot(roomId: string, version: number) {
                 actorId: obj.actorId,
               }
             : null,
-      }))
+      }));
 
       await prisma.canvasSnapshot.create({
         data: {
@@ -40,7 +39,7 @@ export async function triggerSnapshot(roomId: string, version: number) {
           data: { objects: normalizedObjects },
           createdAt: new Date(),
         },
-      })
+      });
 
       // cleanup old snapshots
       await prisma.canvasSnapshot.deleteMany({
@@ -48,11 +47,11 @@ export async function triggerSnapshot(roomId: string, version: number) {
           roomId,
           version: { lt: version - 1000 },
         },
-      })
+      });
 
-      logger.info({ roomId, version }, "Snapshot created")
+      logger.info({ roomId, version }, "Snapshot created");
     } catch (err) {
-      logger.error({ err, roomId, version }, "Snapshot error")
+      logger.error({ err, roomId, version }, "Snapshot error");
     }
-  })
+  });
 }

@@ -1,34 +1,37 @@
 import { Prisma as prisma, CanvasActionType } from "@repo/db";
-import { mergeCRDT, type CRDTObject } from "../crdt/merge"
-import crypto from "crypto"
-import { LogicalTimestamp } from "../crdt/hlc"
-import { isRecord } from "../utils/record.util"
+import { mergeCRDT, type CRDTObject } from "../crdt/merge";
+import crypto from "crypto";
+import { LogicalTimestamp } from "../crdt/hlc";
+import { isRecord } from "../utils/record.util";
 
 function toPrismaJson(
   value: prisma.JsonValue | null,
 ): prisma.InputJsonValue | typeof prisma.JsonNull {
-  return value === null ? prisma.JsonNull : (value as prisma.InputJsonValue)
+  return value === null ? prisma.JsonNull : (value as prisma.InputJsonValue);
 }
 
-export async function saveHistory(tx: prisma.TransactionClient, data: {
-  roomId: string
-  userId: string
-  actionType: CanvasActionType
-  objectId: string
-  before: prisma.JsonValue
-  after: prisma.JsonValue
-  version: number
-  eventId: string
-  timestamp?: number
-  time: number
-  actorId: string
-}){
-  const afterPatch = toJsonRecord(data.after)
+export async function saveHistory(
+  tx: prisma.TransactionClient,
+  data: {
+    roomId: string;
+    userId: string;
+    actionType: CanvasActionType;
+    objectId: string;
+    before: prisma.JsonValue;
+    after: prisma.JsonValue;
+    version: number;
+    eventId: string;
+    timestamp?: number;
+    time: number;
+    actorId: string;
+  },
+) {
+  const afterPatch = toJsonRecord(data.after);
   if (!afterPatch || !isRecord(afterPatch.props)) {
-    throw new Error("CanvasActionHistory.after must be a patch with props")
+    throw new Error("CanvasActionHistory.after must be a patch with props");
   }
 
-await tx.canvasActionHistory.create({
+  await tx.canvasActionHistory.create({
     data: {
       roomId: data.roomId,
       userId: data.userId,
@@ -48,78 +51,77 @@ await tx.canvasActionHistory.create({
       undoneAtVersion: null,
       referenceActionId: null,
     },
-  })
-
-
-
-
+  });
 }
 
 function toJsonRecord(value: unknown): Record<string, any> | null {
-  if (!isRecord(value)) return null
-  return value as Record<string, any>
+  if (!isRecord(value)) return null;
+  return value as Record<string, any>;
 }
 
 function parseCRDTObject(value: unknown): CRDTObject | null {
-  const root = toJsonRecord(value)
-  if (!root) return null
+  const root = toJsonRecord(value);
+  if (!root) return null;
 
-  const props = toJsonRecord(root.props)
-  const meta = toJsonRecord(root.meta)
-  if (!props || !meta) return null
+  const props = toJsonRecord(root.props);
+  const meta = toJsonRecord(root.meta);
+  if (!props || !meta) return null;
 
-  const normalizedMeta: CRDTObject["meta"] = {}
+  const normalizedMeta: CRDTObject["meta"] = {};
   for (const key of Object.keys(meta)) {
-    const entry = toJsonRecord(meta[key])
-    if (!entry) continue
+    const entry = toJsonRecord(meta[key]);
+    if (!entry) continue;
 
-    const time = entry.time
-    const actorId = entry.actorId
-    if (typeof time !== "number" || typeof actorId !== "string") continue
+    const time = entry.time;
+    const actorId = entry.actorId;
+    if (typeof time !== "number" || typeof actorId !== "string") continue;
 
-    normalizedMeta[key] = { time, actorId }
+    normalizedMeta[key] = { time, actorId };
   }
 
   return {
     props,
     meta: normalizedMeta,
-  }
+  };
 }
 
 function parsePatch(value: unknown): Record<string, any> | null {
-  const root = toJsonRecord(value)
-  if (!root) return null
+  const root = toJsonRecord(value);
+  if (!root) return null;
 
-  const props = toJsonRecord(root.props)
-  return props
+  const props = toJsonRecord(root.props);
+  return props;
 }
 
-function resolveType(currentType: string | null | undefined, props: Record<string, any>) {
-  if (currentType) return currentType
-  if (typeof props.type === "string") return props.type
-  return "shape"
+function resolveType(
+  currentType: string | null | undefined,
+  props: Record<string, any>,
+) {
+  if (currentType) return currentType;
+  if (typeof props.type === "string") return props.type;
+  return "shape";
 }
 
 async function applyPatch(
   tx: prisma.TransactionClient,
   args: {
-    roomId: string
-    userId: string
-    objectId: string
-    version: number
-    logicalTimestamp: LogicalTimestamp
-    props: Record<string, any>
+    roomId: string;
+    userId: string;
+    objectId: string;
+    version: number;
+    logicalTimestamp: LogicalTimestamp;
+    props: Record<string, any>;
   },
 ) {
-  const now = new Date()
+  const now = new Date();
   const current = await tx.canvasObject.findUnique({
     where: { id: args.objectId },
-  })
+  });
 
   const merged = mergeCRDT(parseCRDTObject(current?.crdt), {
     props: args.props,
     timestamp: args.logicalTimestamp,
-  })
+  });
 
   await tx.canvasObject.upsert({
     where: { id: args.objectId },
@@ -144,7 +146,7 @@ async function applyPatch(
       version: args.version,
       updatedAt: now,
     },
-  })
+  });
 }
 
 async function applyInverse(
@@ -153,10 +155,10 @@ async function applyInverse(
   version: number,
   logicalTimestamp: LogicalTimestamp,
 ) {
-  if (!action.objectId) return
+  if (!action.objectId) return;
 
-  const before = parseCRDTObject(action.before)
-  const inverseProps = before?.props ?? { deleted: true }
+  const before = parseCRDTObject(action.before);
+  const inverseProps = before?.props ?? { deleted: true };
 
   await applyPatch(tx, {
     roomId: action.roomId,
@@ -165,11 +167,10 @@ async function applyInverse(
     version,
     logicalTimestamp,
     props: inverseProps,
-  })
+  });
 
-  return inverseProps
+  return inverseProps;
 }
-
 
 async function applyForward(
   tx: prisma.TransactionClient,
@@ -177,10 +178,10 @@ async function applyForward(
   version: number,
   logicalTimestamp: LogicalTimestamp,
 ) {
-  if (!action.objectId) return
+  if (!action.objectId) return;
 
-  const patchProps = parsePatch(action.after)
-  if (!patchProps) return null
+  const patchProps = parsePatch(action.after);
+  if (!patchProps) return null;
 
   await applyPatch(tx, {
     roomId: action.roomId,
@@ -189,11 +190,10 @@ async function applyForward(
     version,
     logicalTimestamp,
     props: patchProps,
-  })
+  });
 
-  return patchProps
+  return patchProps;
 }
-
 
 export async function handleUndo(
   tx: prisma.TransactionClient,
@@ -209,15 +209,18 @@ export async function handleUndo(
       userId,
       isUndone: false,
       actionType: {
-        in: [CanvasActionType.CREATE, CanvasActionType.UPDATE, CanvasActionType.DELETE],
+        in: [
+          CanvasActionType.CREATE,
+          CanvasActionType.UPDATE,
+          CanvasActionType.DELETE,
+        ],
       },
     },
     orderBy: [{ time: "desc" }, { actorId: "desc" }],
-  })
+  });
 
-  if (!last) return null
+  if (!last) return null;
 
- 
   const result = await tx.canvasActionHistory.updateMany({
     where: {
       id: last.id,
@@ -225,23 +228,23 @@ export async function handleUndo(
     },
     data: {
       isUndone: true,
-        isRedoInvalidated: false,
+      isRedoInvalidated: false,
       undoneAtVersion: version,
     },
-  })
+  });
 
   if (result.count === 0) {
     // someone else already undid it
-    return null
+    return null;
   }
 
   const currentBeforeUndo = await tx.canvasObject.findUnique({
     where: { id: last.objectId },
     select: { crdt: true },
-  })
+  });
 
   // 3. apply inverse
-  const inverseProps = await applyInverse(tx, last, version, logicalTimestamp)
+  const inverseProps = await applyInverse(tx, last, version, logicalTimestamp);
 
   // 4. write UNDO history
   await tx.canvasActionHistory.create({
@@ -258,14 +261,13 @@ export async function handleUndo(
       eventId: `undo-${crypto.randomUUID()}`,
       version,
       createdAt: new Date(),
-
       isUndone: false,
-        isRedoInvalidated: false,
+      isRedoInvalidated: false,
       undoneAtVersion: null,
     },
-  })
+  });
 
-  return last
+  return last;
 }
 
 /**
@@ -286,13 +288,17 @@ export async function handleRedo(
       isUndone: true,
       isRedoInvalidated: false,
       actionType: {
-        in: [CanvasActionType.CREATE, CanvasActionType.UPDATE, CanvasActionType.DELETE],
+        in: [
+          CanvasActionType.CREATE,
+          CanvasActionType.UPDATE,
+          CanvasActionType.DELETE,
+        ],
       },
     },
     orderBy: [{ time: "desc" }, { actorId: "desc" }],
-  })
+  });
 
-  if (!action) return null
+  if (!action) return null;
 
   // 2. validate redo chain: reject redo when user performed newer actions after the undo marker
   const undoMarker = await tx.canvasActionHistory.findFirst({
@@ -303,9 +309,9 @@ export async function handleRedo(
       referenceActionId: action.id,
     },
     orderBy: [{ time: "desc" }, { actorId: "desc" }],
-  })
+  });
 
-  const undoneAtTime = undoMarker?.time ?? action.time
+  const undoneAtTime = undoMarker?.time ?? action.time;
   if (undoneAtTime) {
     const newerAction = await tx.canvasActionHistory.findFirst({
       where: {
@@ -315,14 +321,13 @@ export async function handleRedo(
         id: { not: undoMarker?.id },
       },
       orderBy: [{ time: "desc" }, { actorId: "desc" }],
-    })
+    });
 
     if (newerAction) {
-      return null
+      return null;
     }
   }
 
- 
   const result = await tx.canvasActionHistory.updateMany({
     where: {
       id: action.id,
@@ -330,21 +335,21 @@ export async function handleRedo(
     },
     data: {
       isUndone: false,
-        isRedoInvalidated: false,
+      isRedoInvalidated: false,
       undoneAtVersion: null,
     },
-  })
+  });
 
-  if (result.count === 0) return null
+  if (result.count === 0) return null;
 
   const currentBeforeRedo = await tx.canvasObject.findUnique({
     where: { id: action.objectId },
     select: { crdt: true },
-  })
+  });
 
   // 4. reapply forward
-  const redoProps = await applyForward(tx, action, version, logicalTimestamp)
-  if (!redoProps) return null
+  const redoProps = await applyForward(tx, action, version, logicalTimestamp);
+  if (!redoProps) return null;
 
   // 5. write REDO history
   await tx.canvasActionHistory.create({
@@ -361,12 +366,11 @@ export async function handleRedo(
       eventId: `redo-${crypto.randomUUID()}`,
       version,
       createdAt: new Date(),
-
       isUndone: false,
-        isRedoInvalidated: false,
+      isRedoInvalidated: false,
       undoneAtVersion: null,
     },
-  })
+  });
 
-  return action
+  return action;
 }

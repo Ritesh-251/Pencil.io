@@ -16,5 +16,6 @@ rabbitClient.setTopology(async (channel: ConfirmChannel) => {
 });
 
 export const initRabbitMQ = () => rabbitClient.connect();
-export const onRabbitReady = (listener: () => void | Promise<void>) => rabbitClient.onReady(listener);
+export const onRabbitReady = (listener: () => void | Promise<void>) =>
+  rabbitClient.onReady(listener);
 export const getChannel = () => rabbitClient.getChannel();

@@ -5,6 +5,7 @@ import { timelineService } from "../services/timeline.service";
 import { getChannel } from "../infra/rabbitmq";
 import { SYSTEM_PROMPTS } from "../prompts";
 import { logger } from "../infra/logger";
+import { lockService } from "../services/lock.service";
 
 export class AiController {
   async ingest(req: Request, res: Response) {
@@ -16,11 +17,29 @@ export class AiController {
       const channel = getChannel();
       if (!channel) throw new Error("RabbitMQ channel not available");
 
-      channel.sendToQueue("ai:ingest", Buffer.from(JSON.stringify({ roomId, includeTranscript })), { persistent: true });
+      const ok = channel.sendToQueue(
+        "ai:ingest",
+        Buffer.from(JSON.stringify({ roomId, includeTranscript })),
+        { persistent: true },
+      );
+      if (!ok) {
+        logger.error({ roomId }, "RabbitMQ sendToQueue failed (buffer full)");
+        return res
+          .status(503)
+          .json({ message: "System busy, please try again later" });
+      }
 
-      return res.status(202).json({ message: "Ingestion started in background", status: "PENDING" });
+      return res
+        .status(202)
+        .json({
+          message: "Ingestion started in background",
+          status: "PENDING",
+        });
     } catch (error: any) {
-      logger.error({ error, roomId: req.params.roomId }, "Failed to initiate ingestion");
+      logger.error(
+        { error, roomId: req.params.roomId },
+        "Failed to initiate ingestion",
+      );
       return res.status(500).json({ message: error.message });
     }
   }
@@ -31,18 +50,29 @@ export class AiController {
       const question = String(req.body?.question || "");
       const canvasImage = req.body?.canvasImage;
       const includeTranscript = req.body?.includeTranscript !== false;
-      
-      if (!roomId || !question) return res.status(400).json({ message: "Room ID and Question required" });
+
+      if (!roomId || !question)
+        return res
+          .status(400)
+          .json({ message: "Room ID and Question required" });
 
       const questionEmbedding = await aiService.embedText(question);
-      let chunks = await timelineService.retrieveChunks(roomId, questionEmbedding);
+      let chunks = await timelineService.retrieveChunks(
+        roomId,
+        questionEmbedding,
+      );
 
       if (chunks.length === 0) {
         await timelineService.ingestRoom(roomId, { includeTranscript });
-        chunks = await timelineService.retrieveChunks(roomId, questionEmbedding);
+        chunks = await timelineService.retrieveChunks(
+          roomId,
+          questionEmbedding,
+        );
       }
 
-      const context = chunks.map((c, i) => `Chunk ${i + 1}:\n${c.content}`).join("\n\n");
+      const context = chunks
+        .map((c, i) => `Chunk ${i + 1}:\n${c.content}`)
+        .join("\n\n");
       const result = await aiService.generateWithFallback({
         model: process.env.GEMINI_CHAT_MODEL!,
         system: SYSTEM_PROMPTS.QUERY_ASSISTANT,
@@ -53,11 +83,11 @@ export class AiController {
       return res.status(200).json({
         answer: result.text,
         provider: result.provider,
-        sources: chunks.map(c => ({
+        sources: chunks.map((c) => ({
           type: timelineService.sourceTypeFromContent(c.content),
           content: c.content,
           score: c.score,
-        }))
+        })),
       });
     } catch (error: any) {
       return res.status(500).json({ message: error.message });
@@ -71,43 +101,89 @@ export class AiController {
       const includeTranscript = req.query.includeTranscript !== "false";
 
       if (!refresh) {
-        const cached = await prisma.sessionSummary.findUnique({ where: { roomId } });
+        const cached = await prisma.sessionSummary.findUnique({
+          where: { roomId },
+        });
         if (cached) {
           const counts = await timelineService.getRoomActivityCounts(roomId);
-          return res.status(200).json({ summary: cached.summary, counts, cached: true });
+          return res
+            .status(200)
+            .json({ summary: cached.summary, counts, cached: true });
         }
       }
 
-      const ingestResult = await timelineService.ingestRoom(roomId, { includeTranscript });
+      const lockKey = `ingest:${roomId}`;
+      const acquired = await lockService.acquire(lockKey, 30000);
+
+      let ingestResult;
+      if (acquired) {
+        try {
+          ingestResult = await timelineService.ingestRoom(roomId, {
+            includeTranscript,
+          });
+        } finally {
+          lockService.release(lockKey);
+        }
+      } else {
+        logger.info(
+          { roomId },
+          "Ingestion already in progress, skipping redundant call",
+        );
+        // We can either wait or just proceed with existing data.
+        // For summary, we'll proceed with existing data if possible.
+        ingestResult = {
+          counts: await timelineService.getRoomActivityCounts(roomId),
+        };
+      }
+
       const contextChunks = await prisma.sessionChunk.findMany({
-        where: { roomId }, orderBy: { startMs: "asc" }, take: 32, select: { content: true }
+        where: { roomId },
+        orderBy: { startMs: "asc" },
+        take: 32,
+        select: { content: true },
       });
 
-      const context = contextChunks.map(c => c.content).join("\n\n");
+      const context = contextChunks.map((c) => c.content).join("\n\n");
       let summary: string;
       let provider: string;
 
       try {
         const result = await aiService.generateWithFallback({
           model: process.env.GEMINI_SUMMARY_MODEL!,
-          system: SYSTEM_PROMPTS.SUMMARY_STRATEGIST.replace("[Current Date]", new Date().toLocaleDateString()),
+          system: SYSTEM_PROMPTS.SUMMARY_STRATEGIST.replace(
+            "[Current Date]",
+            new Date().toLocaleDateString(),
+          ),
           prompt: context || "No activity found.",
         });
         summary = result.text;
         provider = result.provider;
       } catch (err) {
-        summary = timelineService.buildHeuristicSummary({ roomId, counts: ingestResult.counts, contextChunks });
+        summary = timelineService.buildHeuristicSummary({
+          roomId,
+          counts: ingestResult.counts as any,
+          contextChunks,
+        });
         provider = "timeline-fallback";
       }
 
       await prisma.sessionSummary.upsert({
-        where: { roomId }, create: { roomId, summary }, update: { summary }
+        where: { roomId },
+        create: { roomId, summary },
+        update: { summary },
       });
 
       // 🔥 Trigger Email Summary to participants
       void this.notifyParticipants(roomId, summary);
 
-      return res.status(200).json({ summary, provider, counts: ingestResult.counts, cached: false });
+      return res
+        .status(200)
+        .json({
+          summary,
+          provider,
+          counts: ingestResult.counts,
+          cached: false,
+        });
     } catch (error: any) {
       return res.status(500).json({ message: error.message });
     }
@@ -117,27 +193,44 @@ export class AiController {
     try {
       const room = await prisma.room.findUnique({
         where: { id: roomId },
-        include: { members: { include: { user: { select: { email: true } } } } }
+        include: {
+          members: { include: { user: { select: { email: true } } } },
+        },
       });
 
       if (!room) return;
 
-      const emails = room.members.map(m => m.user.email).filter(Boolean);
+      const emails = room.members.map((m) => m.user.email).filter(Boolean);
       if (emails.length === 0) return;
 
       const channel = getChannel();
-      const content = Buffer.from(JSON.stringify({
-        type: "SESSION_SUMMARY",
-        payload: {
-          emails,
-          summary,
-          roomName: room.name || "Collaborative Session"
-        }
-      }));
+      if (!channel) {
+        logger.warn(
+          { roomId },
+          "RabbitMQ channel not ready for email notification",
+        );
+        return;
+      }
 
-      channel.publish("events.exchange", "email.summary", content, { persistent: true });
+      const content = Buffer.from(
+        JSON.stringify({
+          type: "SESSION_SUMMARY",
+          payload: {
+            emails,
+            summary,
+            roomName: room.name || "Collaborative Session",
+          },
+        }),
+      );
+
+      channel.publish("events.exchange", "email.summary", content, {
+        persistent: true,
+      });
     } catch (error) {
-      logger.error({ error, roomId }, "Failed to notify participants via email");
+      logger.error(
+        { error, roomId },
+        "Failed to notify participants via email",
+      );
     }
   }
 }

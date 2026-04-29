@@ -1,5 +1,5 @@
-import { Navbar } from '@/components/landing/Navbar';
-import { HeroSection, FeaturesRow } from '@/components/landing/HeroSection';
+import { Navbar } from "@/components/landing/Navbar";
+import { HeroSection, FeaturesRow } from "@/components/landing/HeroSection";
 
 export default function LandingPage() {
   return (

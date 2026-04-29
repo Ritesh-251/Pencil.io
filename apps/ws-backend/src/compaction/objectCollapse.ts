@@ -1,43 +1,43 @@
-import { CanvasActionType, Prisma } from "@repo/db"
-import { readPatchProps, type EventWithPatch } from "./fieldSquash"
+import { CanvasActionType, Prisma } from "@repo/db";
+import { readPatchProps, type EventWithPatch } from "./fieldSquash";
 
 export type CollapseEvent = EventWithPatch & {
-  roomId: string
-  userId: string
-  objectId: string
-  before: Prisma.JsonValue
-  actionType: CanvasActionType
-  time: bigint | null
-  actorId: string | null
-  version: number
-  createdAt: Date
-}
+  roomId: string;
+  userId: string;
+  objectId: string;
+  before: Prisma.JsonValue;
+  actionType: CanvasActionType;
+  time: bigint | null;
+  actorId: string | null;
+  version: number;
+  createdAt: Date;
+};
 
 export type CollapsedEvent = {
-  roomId: string
-  userId: string
-  objectId: string
-  before: Prisma.JsonValue
-  after: Prisma.InputJsonValue
-  actionType: CanvasActionType
-  time: bigint
-  actorId: string
-  version: number
-  createdAt: Date
-}
+  roomId: string;
+  userId: string;
+  objectId: string;
+  before: Prisma.JsonValue;
+  after: Prisma.InputJsonValue;
+  actionType: CanvasActionType;
+  time: bigint;
+  actorId: string;
+  version: number;
+  createdAt: Date;
+};
 
 export function collapseEvents(events: CollapseEvent[]): CollapsedEvent | null {
-  if (events.length === 0) return null
+  if (events.length === 0) return null;
 
-  const first = events[0]!
-  const last = events[events.length - 1]!
+  const first = events[0]!;
+  const last = events[events.length - 1]!;
 
-  if (!last.time || !last.actorId) return null
+  if (!last.time || !last.actorId) return null;
 
-  const mergedProps: Record<string, Prisma.JsonValue> = {}
+  const mergedProps: Record<string, Prisma.JsonValue> = {};
   for (const event of events) {
-    const props = readPatchProps(event.after)
-    Object.assign(mergedProps, props)
+    const props = readPatchProps(event.after);
+    Object.assign(mergedProps, props);
   }
 
   return {
@@ -51,5 +51,5 @@ export function collapseEvents(events: CollapseEvent[]): CollapsedEvent | null {
     actorId: last.actorId,
     version: last.version,
     createdAt: last.createdAt,
-  }
+  };
 }

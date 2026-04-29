@@ -20,10 +20,10 @@ export type MediaParticipantSnapshot = {
 
 /** A single ephemeral reaction bubble shown on a participant tile. */
 export type ReactionEvent = {
-  id: string;       // unique per bubble so React keys work
+  id: string; // unique per bubble so React keys work
   identity: string; // sender's LiveKit identity
   emoji: string;
-  at: number;       // Date.now() — used to auto-expire
+  at: number; // Date.now() — used to auto-expire
 };
 
 interface MediaState {
@@ -47,7 +47,11 @@ interface MediaState {
   setStatus: (status: MediaStatus) => void;
   setRoom: (room: Room | null) => void;
   setError: (error: string | null) => void;
-  setDevices: (input: { audioEnabled: boolean; videoEnabled: boolean; screenShareEnabled: boolean }) => void;
+  setDevices: (input: {
+    audioEnabled: boolean;
+    videoEnabled: boolean;
+    screenShareEnabled: boolean;
+  }) => void;
   setNoiseSuppression: (enabled: boolean) => void;
   setParticipants: (participants: MediaParticipantSnapshot[]) => void;
   setActiveSpeakers: (identities: string[]) => void;
@@ -95,5 +99,6 @@ export const useMediaStore = create<MediaState>((set) => ({
   pruneReactions: (before) =>
     set((s) => ({ reactions: s.reactions.filter((r) => r.at >= before) })),
   setTranscriptEnabled: (enabled) => set({ transcriptEnabled: enabled }),
-  reset: () => set({ ...initialState, raisedHands: new Set<string>(), reactions: [] }),
+  reset: () =>
+    set({ ...initialState, raisedHands: new Set<string>(), reactions: [] }),
 }));

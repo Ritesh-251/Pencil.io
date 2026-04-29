@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import { api } from '../lib/api';
+import { create } from "zustand";
+import { api } from "../lib/api";
 
 // ─── Proper Types ─────────────────────────────────────────────────────────────
 
@@ -7,9 +7,9 @@ export interface Room {
   roomId: string;
   id: string;
   name: string;
-  role: 'ADMIN' | 'MEMBER';
+  role: "ADMIN" | "MEMBER";
   memberCount: number;
-  visibility: 'PUBLIC' | 'PRIVATE';
+  visibility: "PUBLIC" | "PRIVATE";
   lastMessage: { content: string; createdAt: string } | null;
 }
 
@@ -26,7 +26,7 @@ export interface ChatMessage {
 export interface PresenceUser {
   id: string;
   name: string;
-  status?: 'online' | 'offline';
+  status?: "online" | "offline";
 }
 
 // ─── Room Store ───────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export const useRoomStore = create<RoomState>((set) => ({
   fetchRooms: async () => {
     set({ loading: true });
     try {
-      const res = await api.get('/api/v1/rooms');
+      const res = await api.get("/api/v1/rooms");
       const rooms: Room[] = (res.rooms ?? []).map((room: any) => ({
         ...room,
         // Normalize: API may return either roomId or id depending on the endpoint
@@ -55,7 +55,7 @@ export const useRoomStore = create<RoomState>((set) => ({
       }));
       set({ rooms });
     } catch (error) {
-      console.error('Failed to fetch rooms:', error);
+      console.error("Failed to fetch rooms:", error);
       set({ rooms: [] });
     } finally {
       set({ loading: false });
@@ -89,7 +89,7 @@ export const usePresenceStore = create<PresenceState>((set) => ({
   setOnline: (id, name) =>
     set((s) => {
       const next = new Map(s.users);
-      next.set(id, { id, name, status: 'online' });
+      next.set(id, { id, name, status: "online" });
       return { users: next };
     }),
   setOffline: (id) =>

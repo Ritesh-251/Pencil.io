@@ -16,7 +16,10 @@ type TimelineBuildOptions = {
   includeTranscript?: boolean;
 };
 
-export async function fetchTimelineData(roomId: string, options?: TimelineBuildOptions) {
+export async function fetchTimelineData(
+  roomId: string,
+  options?: TimelineBuildOptions,
+) {
   const includeTranscript = options?.includeTranscript !== false;
   const [canvasEvents, chatMessages, transcriptSegments] = await Promise.all([
     prisma.canvasActionHistory.findMany({
@@ -70,7 +73,10 @@ function typeFromAction(actionType: CanvasActionType) {
 }
 
 function objectTypeFromAfter(after: unknown) {
-  const asRecord = typeof after === "object" && after !== null ? (after as Record<string, unknown>) : null;
+  const asRecord =
+    typeof after === "object" && after !== null
+      ? (after as Record<string, unknown>)
+      : null;
   const maybeProps =
     asRecord && typeof asRecord.props === "object" && asRecord.props !== null
       ? (asRecord.props as Record<string, unknown>)
@@ -86,9 +92,14 @@ function userNameFromEmail(email: string | null) {
   return name || "User";
 }
 
-function normalizeTranscriptEpochBase(segments: Array<{ startMs: number; endMs: number; createdAt: Date }>) {
+function normalizeTranscriptEpochBase(
+  segments: Array<{ startMs: number; endMs: number; createdAt: Date }>,
+) {
   if (segments.length === 0) return null;
-  const maxStartMs = Math.max(...segments.map((item) => item.startMs));
+  const maxStartMs = segments.reduce(
+    (max, item) => Math.max(max, item.startMs),
+    0,
+  );
   if (maxStartMs > 1_000_000_000_000) return null;
 
   // Calculate potential epoch bases (wall_clock - relative_offset)
@@ -99,15 +110,18 @@ function normalizeTranscriptEpochBase(segments: Array<{ startMs: number; endMs: 
   // Use the median value to avoid outliers from delayed processing
   const mid = Math.floor(bases.length / 2);
   const medianBase =
-    bases.length % 2 !== 0
-      ? bases[mid]!
-      : (bases[mid - 1]! + bases[mid]!) / 2;
+    bases.length % 2 !== 0 ? bases[mid]! : (bases[mid - 1]! + bases[mid]!) / 2;
 
   return medianBase;
 }
 
-export function buildUnifiedTimeline(roomId: string, data: Awaited<ReturnType<typeof fetchTimelineData>>) {
-  const transcriptBaseEpoch = normalizeTranscriptEpochBase(data.transcriptSegments);
+export function buildUnifiedTimeline(
+  roomId: string,
+  data: Awaited<ReturnType<typeof fetchTimelineData>>,
+) {
+  const transcriptBaseEpoch = normalizeTranscriptEpochBase(
+    data.transcriptSegments,
+  );
   const timeline: TimelineItem[] = [];
 
   for (const item of data.canvasEvents) {
@@ -128,10 +142,9 @@ export function buildUnifiedTimeline(roomId: string, data: Awaited<ReturnType<ty
   }
 
   for (const item of data.transcriptSegments) {
-    const speaker =
-      item.participantIdentity.includes(":")
-        ? item.participantIdentity.split(":")[0] ?? item.participantIdentity
-        : item.participantIdentity;
+    const speaker = item.participantIdentity.includes(":")
+      ? (item.participantIdentity.split(":")[0] ?? item.participantIdentity)
+      : item.participantIdentity;
     const timestamp =
       transcriptBaseEpoch !== null
         ? transcriptBaseEpoch + item.startMs
@@ -181,7 +194,9 @@ export function chunkTimeline(timeline: TimelineItem[], windowMs = 30_000) {
   while (cursor <= end) {
     const windowStart = cursor;
     const windowEnd = cursor + windowMs;
-    const inWindow = timeline.filter((item) => item.t >= windowStart && item.t < windowEnd);
+    const inWindow = timeline.filter(
+      (item) => item.t >= windowStart && item.t < windowEnd,
+    );
     if (inWindow.length > 0) {
       const content = inWindow
         .map((item) => `[${formatWindowMs(item.t - start)}] ${item.text}`)

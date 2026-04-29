@@ -17,13 +17,16 @@ function isAuthorized(authHeader: string | undefined) {
   const internalSecret = process.env.INTERNAL_SECRET;
   if (!internalSecret) return false;
   if (!authHeader?.startsWith("Bearer ")) return false;
-  
+
   const provided = authHeader.slice("Bearer ".length);
-  
+
   // Use hash comparison to avoid timing leaks of input length
-  const expectedHash = crypto.createHash('sha256').update(internalSecret).digest();
-  const actualHash = crypto.createHash('sha256').update(provided).digest();
-  
+  const expectedHash = crypto
+    .createHash("sha256")
+    .update(internalSecret)
+    .digest();
+  const actualHash = crypto.createHash("sha256").update(provided).digest();
+
   return crypto.timingSafeEqual(expectedHash, actualHash);
 }
 
@@ -34,22 +37,31 @@ const createTranscriptHandler: RequestHandler = async (req, res) => {
     }
 
     const payload = req.body as InternalTranscriptPayload;
-    const roomId = typeof payload.roomId === "string" ? payload.roomId.trim() : "";
+    const roomId =
+      typeof payload.roomId === "string" ? payload.roomId.trim() : "";
     const participantIdentity =
       typeof payload.participantIdentity === "string"
         ? payload.participantIdentity.trim()
         : "";
     const text = typeof payload.text === "string" ? payload.text.trim() : "";
     const startMsRaw =
-      typeof payload.startMs === "number" ? payload.startMs : Number(payload.startMs);
+      typeof payload.startMs === "number"
+        ? payload.startMs
+        : Number(payload.startMs);
     const endMsRaw =
       typeof payload.endMs === "number" ? payload.endMs : Number(payload.endMs);
 
     if (!roomId || !participantIdentity || !text) {
-      return res.status(400).json({ message: "roomId, participantIdentity, and text are required" });
+      return res
+        .status(400)
+        .json({
+          message: "roomId, participantIdentity, and text are required",
+        });
     }
     if (!Number.isFinite(startMsRaw) || !Number.isFinite(endMsRaw)) {
-      return res.status(400).json({ message: "startMs and endMs must be numbers" });
+      return res
+        .status(400)
+        .json({ message: "startMs and endMs must be numbers" });
     }
 
     const startMs = Math.max(0, Math.floor(startMsRaw));
@@ -65,17 +77,20 @@ const createTranscriptHandler: RequestHandler = async (req, res) => {
       },
     });
 
-    logger.info({
-      roomId,
-      participantIdentity,
-      startMs,
-      endMs,
-      textLength: text.length,
-    }, "Transcript segment stored");
+    logger.info(
+      {
+        roomId,
+        participantIdentity,
+        startMs,
+        endMs,
+        textLength: text.length,
+      },
+      "Transcript segment stored",
+    );
 
     return res.status(201).json({ ok: true });
   } catch (error) {
-    logger.error({ err: error }, "Internal transcript ingestion failed")
+    logger.error({ err: error }, "Internal transcript ingestion failed");
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -86,7 +101,8 @@ const transcriptHealthHandler: RequestHandler = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const roomId = typeof req.query.roomId === "string" ? req.query.roomId.trim() : "";
+    const roomId =
+      typeof req.query.roomId === "string" ? req.query.roomId.trim() : "";
     const where = roomId ? { roomId } : {};
 
     const [count, latest] = await Promise.all([
@@ -112,7 +128,7 @@ const transcriptHealthHandler: RequestHandler = async (req, res) => {
       latest,
     });
   } catch (error) {
-    logger.error({ err: error }, "Transcript health check failed")
+    logger.error({ err: error }, "Transcript health check failed");
     return res.status(500).json({ message: "Internal server error" });
   }
 };

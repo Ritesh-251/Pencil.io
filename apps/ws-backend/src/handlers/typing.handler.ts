@@ -9,7 +9,7 @@ export const handleTyping = (socket: AuthenticatedSocket, payload: any) => {
   const { roomId } = payload;
   if (!roomId) return sendSocketError(socket, "roomId is required");
   if (!roomManager.isSocketInRoom(socket, roomId)) {
-    return sendSocketError(socket, "User is not in room")
+    return sendSocketError(socket, "User is not in room");
   }
 
   roomManager.broadCast(roomId, {
@@ -25,7 +25,7 @@ export const handleStopTyping = (socket: AuthenticatedSocket, payload: any) => {
   const { roomId } = payload;
   if (!roomId) return sendSocketError(socket, "roomId is required");
   if (!roomManager.isSocketInRoom(socket, roomId)) {
-    return sendSocketError(socket, "User is not in room")
+    return sendSocketError(socket, "User is not in room");
   }
 
   roomManager.broadCast(roomId, {

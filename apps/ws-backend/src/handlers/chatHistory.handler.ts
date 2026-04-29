@@ -1,7 +1,10 @@
 import { AuthenticatedSocket } from "../types/socket";
 import { logger } from "../infra/logger";
 import { sendSocketError } from "../utils/socket.util";
-import { assertRoomMember, isRoomAccessDeniedError } from "../services/roomAccess.service";
+import {
+  assertRoomMember,
+  isRoomAccessDeniedError,
+} from "../services/roomAccess.service";
 import { getRecentRoomMessages } from "../services/chatRead.service";
 
 export const handleChatHistory = async function (
@@ -17,8 +20,8 @@ export const handleChatHistory = async function (
   }
 
   try {
-    await assertRoomMember(socket.userId!, roomId)
-    const orderedMessages = await getRecentRoomMessages(roomId, 50)
+    await assertRoomMember(socket.userId!, roomId);
+    const orderedMessages = await getRecentRoomMessages(roomId, 50);
     socket.send(
       JSON.stringify({
         type: "chat:history",
@@ -29,10 +32,13 @@ export const handleChatHistory = async function (
     );
   } catch (error) {
     if (isRoomAccessDeniedError(error)) {
-      return sendSocketError(socket, "Not a member of this room")
+      return sendSocketError(socket, "Not a member of this room");
     }
 
-    logger.error({ err: error, userId: socket.userId, roomId }, "Chat history error")
+    logger.error(
+      { err: error, userId: socket.userId, roomId },
+      "Chat history error",
+    );
     sendSocketError(socket, "Internal server error");
   }
 };

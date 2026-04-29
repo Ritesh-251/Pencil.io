@@ -8,18 +8,20 @@ async function checkData() {
     const transcriptCount = await prisma.transcriptSegment.count();
     const chunkCount = await prisma.sessionChunk.count();
     const summaryCount = await prisma.sessionSummary.count();
-    
-    logger.info({
-      transcriptCount,
-      chunkCount,
-      summaryCount
-    }, "Database counts");
-    
+
+    logger.info(
+      {
+        transcriptCount,
+        chunkCount,
+        summaryCount,
+      },
+      "Database counts",
+    );
+
     const latestTranscript = await prisma.transcriptSegment.findFirst({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: "desc" },
     });
     logger.info({ latestTranscript }, "Latest Transcript");
-    
   } catch (error) {
     logger.error({ error }, "Error checking data");
   } finally {

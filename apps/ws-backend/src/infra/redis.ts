@@ -4,42 +4,49 @@ import { logger } from "./logger";
 
 const SERVER_ID = crypto.randomUUID();
 
-logger.info({ serverId: SERVER_ID }, "Redis server id assigned")
+logger.info({ serverId: SERVER_ID }, "Redis server id assigned");
 
 export const pubsub = new RedisPubSub(SERVER_ID);
 
 export async function initRedis() {
-  logger.info("Redis connecting")
+  logger.info("Redis connecting");
   await pubsub.connect();
-  logger.info("Redis connected")
+  logger.info("Redis connected");
 }
 
 export function isRedisHealthy() {
-  return pubsub.isHealthy()
+  return pubsub.isHealthy();
 }
 
 export async function safePublish(event: {
-  type: string
-  roomId: string
-  payload: any
+  type: string;
+  roomId: string;
+  payload: any;
 }) {
   try {
-    await pubsub.publish(event)
+    await pubsub.publish(event);
   } catch (error) {
-    logger.error({
-      error,
-      eventType: event.type,
-      roomId: event.roomId,
-    }, "Redis publish failed; local-only fallback")
+    logger.error(
+      {
+        error,
+        eventType: event.type,
+        roomId: event.roomId,
+      },
+      "Redis publish failed; local-only fallback",
+    );
   }
 }
 
-export async function acquireDistributedLock(key: string, token: string, ttlMs: number) {
-  return pubsub.tryAcquireLock(key, token, ttlMs)
+export async function acquireDistributedLock(
+  key: string,
+  token: string,
+  ttlMs: number,
+) {
+  return pubsub.tryAcquireLock(key, token, ttlMs);
 }
 
 export async function releaseDistributedLock(key: string, token: string) {
-  return pubsub.releaseLock(key, token)
+  return pubsub.releaseLock(key, token);
 }
 
 export { SERVER_ID };

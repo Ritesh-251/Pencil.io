@@ -1,9 +1,9 @@
-let overloaded = false
+let overloaded = false;
 
 export function setOverloaded(value: boolean) {
-  overloaded = value
+  overloaded = value;
 }
 
 export function isOverloaded() {
-  return overloaded
+  return overloaded;
 }

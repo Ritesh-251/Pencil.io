@@ -58,7 +58,7 @@ export const HeroSection = () => {
           </h1>
 
           <p className="soft-copy mt-5 max-w-[620px] text-[1.04rem] leading-[1.75] animate-fade-in-up stagger-1">
-            Pencil.io brings sketching, decision logs, and team chat into one
+            MyPencil brings sketching, decision logs, and team chat into one
             tactile room. It stays fast under load and clear under pressure.
           </p>
 

@@ -13,8 +13,8 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Pencil.io",
-  description: "Realtime collaborative canvas workspace.",
+  title: "MyPencil",
+  description: "The cinematic collaborative workspace for teams. mypencil.tech",
 };
 
 export default function RootLayout({

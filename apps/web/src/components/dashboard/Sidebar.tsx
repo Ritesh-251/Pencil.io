@@ -2,8 +2,11 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth.store";
 import { api } from "@/lib/api";
+import { useTimerStore } from "@/store/timer.store";
+import { useNotificationStore } from "@/store/notification.store";
+import { Bell, Play, Pause, RotateCcw, Clock, Target } from "lucide-react";
 
-export type DashboardTab = "ROOMS" | "FILES" | "PLANNER";
+export type DashboardTab = "ROOMS" | "INBOX" | "PLANNER" | "PROFILE";
 
 interface SidebarProps {
   activeTab: DashboardTab;
@@ -15,10 +18,17 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const [visibility, setVisibility] = useState<"PUBLIC" | "PRIVATE">("PUBLIC");
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  const timer = useTimerStore();
+  const { unreadCount, fetchUnreadCount } = useNotificationStore();
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    fetchUnreadCount();
+    const interval = setInterval(() => {
+      timer.tick();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timer]);
 
   const handleCreateRoom = async () => {
     try {
@@ -37,20 +47,20 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
     if (activeTab === tab) {
       return (
         base +
-        "border border-[rgba(26,26,26,.2)] bg-[rgba(13,91,215,.13)] text-[var(--ink)] font-semibold"
+        "border border-[rgba(26,26,26,.12)] bg-[rgba(13,91,215,.06)] text-[var(--brand)] font-bold shadow-sm"
       );
     }
-    return base + "soft-copy hover:bg-[rgba(26,26,26,.03)]";
+    return base + "soft-copy hover:bg-[rgba(26,26,26,.02)]";
   };
 
   return (
-    <aside className="glass flex flex-col gap-3 rounded-[20px] p-4">
+    <aside className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col gap-3 rounded-[24px] p-4 shadow-sm">
       <div>
         <p className="m-0 text-[0.72rem] uppercase tracking-[0.12em] text-[var(--ink-soft)]">
           Workspace
         </p>
-        <div className="mt-1 text-[1.2rem] font-bold tracking-[-0.02em]">
-          Pencil.io
+        <div className="text-[1.02rem] tracking-[-0.05em] text-[var(--ink)]">
+          MyPencil
         </div>
       </div>
 
@@ -62,10 +72,15 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
           Rooms
         </div>
         <div
-          onClick={() => onTabChange("FILES")}
-          className={getTabClass("FILES")}
+          onClick={() => onTabChange("INBOX")}
+          className={`${getTabClass("INBOX")} flex items-center justify-between group`}
         >
-          Shared Files
+          Inbox
+          {mounted && unreadCount > 0 && (
+            <div className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-sm ring-4 ring-red-500/10 animate-in zoom-in duration-300">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </div>
+          )}
         </div>
         <div
           onClick={() => onTabChange("PLANNER")}
@@ -96,12 +111,103 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
       </div>
 
       <div className="flex-1"></div>
-      <div className="flex items-center justify-between border-t border-[rgba(26,26,26,.12)] pt-3">
-        <span className="font-semibold">
-          {mounted ? user?.username || "Guest" : "Guest"}
-        </span>
-        <button onClick={logout} className="btn btn-ghost btn-sm">
-          Logout
+
+      {/* Pomodoro Focus Widget */}
+      {mounted && (
+        <div className="bg-[rgba(26,26,26,0.03)] border border-[rgba(26,26,26,0.05)] rounded-[20px] p-3 flex flex-col gap-2 transition-all hover:bg-[rgba(26,26,26,0.04)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${timer.isActive ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}`} />
+              <span className="text-[10px] font-black uppercase tracking-widest text-[var(--ink-soft)]">
+                {timer.mode === 'work' ? 'Focus Session' : 'Short Break'}
+              </span>
+            </div>
+            <button 
+              onClick={timer.reset}
+              className="p-1 hover:bg-white rounded-md transition-colors text-[var(--ink-soft)] opacity-40 hover:opacity-100"
+              title="Reset Timer"
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-col">
+              <div className="text-2xl font-black tracking-tighter tabular-nums leading-none">
+                {Math.floor(timer.timeLeft / 60)}:{(timer.timeLeft % 60).toString().padStart(2, '0')}
+              </div>
+              {timer.activeTaskTitle && (
+                <div className="text-[10px] font-bold text-indigo-500 truncate max-w-[120px] mt-1 flex items-center gap-1">
+                  <Target className="w-2.5 h-2.5" />
+                  {timer.activeTaskTitle}
+                </div>
+              )}
+            </div>
+
+            <button 
+              onClick={timer.isActive ? timer.pause : () => timer.start()}
+              className={`w-10 h-10 rounded-full flex items-center justify-center shadow-md transition-all active:scale-95 ${
+                timer.isActive 
+                  ? 'bg-white text-amber-500 ring-1 ring-amber-500/20' 
+                  : 'bg-indigo-600 text-white shadow-indigo-200'
+              }`}
+            >
+              {timer.isActive ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+            </button>
+          </div>
+          
+          <div className="h-1 bg-[rgba(26,26,26,0.05)] rounded-full overflow-hidden mt-1">
+            <div 
+              className={`h-full transition-all duration-1000 ${timer.mode === 'work' ? 'bg-indigo-500' : 'bg-emerald-500'}`}
+              style={{ width: `${(timer.timeLeft / timer.totalTime) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* User Profile Block */}
+      <div className="border-t border-[rgba(26,26,26,.08)] pt-4 flex flex-col gap-3">
+        <div 
+          onClick={() => onTabChange("PROFILE")}
+          className={`group flex items-center gap-3 p-2 rounded-[16px] cursor-pointer transition-all duration-300 ${activeTab === "PROFILE" ? "bg-[rgba(13,91,215,0.08)] ring-1 ring-[rgba(13,91,215,0.1)] shadow-sm" : "hover:bg-[rgba(26,26,26,0.03)]"}`}
+        >
+          <div className="relative shrink-0">
+            <div 
+              className="w-9 h-9 rounded-full border border-white/20 shadow-md flex items-center justify-center overflow-hidden transition-transform duration-300 group-hover:scale-105"
+              style={{ 
+                background: mounted && user ? `linear-gradient(135deg, ${stringToColor(user.email)}, ${stringToColor(user.email + 'salt')})` : '#eee'
+              }}
+            >
+              {mounted && user?.avatarUrl && user.avatarUrl.trim() !== "" ? (
+                <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-[10px] font-black text-white uppercase tracking-tighter">
+                  {mounted && user ? (user.name?.slice(0, 2) || user.email.slice(0, 2) || "??") : "??"}
+                </span>
+              )}
+            </div>
+            {mounted && user && (
+              <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-sm" />
+            )}
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <p className={`text-[0.78rem] font-bold truncate transition-colors ${activeTab === "PROFILE" ? "text-indigo-600" : "text-[var(--ink)]"}`}>
+              {mounted && user ? (user.name || user.email.split('@')[0]) : "Loading..."}
+            </p>
+            <p className="text-[0.65rem] font-medium text-[var(--ink-soft)] opacity-60 truncate">
+              {mounted && user ? user.email : "Connecting..."}
+            </p>
+          </div>
+        </div>
+
+        <button 
+          onClick={logout} 
+          disabled={!mounted}
+          className="w-full flex items-center justify-between px-3 py-2 text-[0.72rem] font-bold text-red-500 hover:bg-red-50 rounded-xl transition-colors group disabled:opacity-50"
+        >
+          Logout Account
+          <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
         </button>
       </div>
     </aside>
@@ -143,7 +249,7 @@ export const RoomCard = ({ room }: { room: any }) => {
 
   return (
     <div
-      className="cursor-pointer rounded-2xl border border-[var(--border-subtle)] bg-[rgba(255,250,241,.72)] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-[rgba(13,91,215,.42)] hover:shadow-[0_14px_32_rgba(13,91,215,.15)]"
+      className="cursor-pointer rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 transition duration-200 hover:-translate-y-0.5 hover:border-[rgba(13,91,215,.42)] hover:shadow-[0_14px_32px_rgba(13,91,215,.08)]"
       onClick={() => {
         if (!roomPathId) return;
         window.location.href = `/room/${roomPathId}`;
@@ -174,4 +280,14 @@ export const RoomCard = ({ room }: { room: any }) => {
       </p>
     </div>
   );
+};
+
+const stringToColor = (str: string) => {
+  if (!str) return "#6366f1";
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const h = Math.abs(hash) % 360;
+  return `hsl(${h}, 65%, 55%)`;
 };

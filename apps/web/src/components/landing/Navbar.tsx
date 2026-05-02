@@ -6,7 +6,7 @@ export const Navbar = () => (
       <div className="grid h-9 w-9 place-items-center rounded-[10px] border border-[rgba(26,26,26,0.2)] bg-[rgba(13,91,215,0.12)]">
         ✏️
       </div>
-      <div className="text-[1.02rem] tracking-[-0.02em]">Pencil.io</div>
+      <div className="text-[1.02rem] tracking-[-0.02em]">MyPencil</div>
     </div>
     <div className="hidden items-center gap-4 md:flex">
       <a

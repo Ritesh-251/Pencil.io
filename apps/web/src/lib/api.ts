@@ -89,51 +89,57 @@ async function refreshAccessToken(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
-    const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
+    try {
+      const res = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
 
-    if (!res.ok) {
-      if (res.status === 429) {
-        const retryAfterRaw = Number(res.headers.get("retry-after") || "0");
-        const retryAfterMs =
-          Number.isFinite(retryAfterRaw) && retryAfterRaw > 0
-            ? retryAfterRaw * 1000
-            : 5000;
-        refreshBlockedUntil = Date.now() + retryAfterMs;
-        console.warn("[api] Refresh endpoint rate-limited", {
-          status: res.status,
-          retryAfterMs,
-        });
+      if (!res.ok) {
+        if (res.status === 429) {
+          const retryAfterRaw = Number(res.headers.get("retry-after") || "0");
+          const retryAfterMs =
+            Number.isFinite(retryAfterRaw) && retryAfterRaw > 0
+              ? retryAfterRaw * 1000
+              : 5000;
+          refreshBlockedUntil = Date.now() + retryAfterMs;
+          console.warn("[api] Refresh endpoint rate-limited", {
+            status: res.status,
+            retryAfterMs,
+          });
+          return null;
+        }
+
+        // Refresh failed — clear memory token and session marker
+        _memoryToken = null;
+        if (typeof document !== "undefined") {
+          document.cookie = `has_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+        }
         return null;
       }
 
-      // Refresh failed — clear memory token and session marker
-      _memoryToken = null;
-      if (typeof document !== "undefined") {
-        document.cookie = `has_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+      let data: any = {};
+      const text = await res.text();
+      try {
+        if (text) data = JSON.parse(text);
+      } catch {
+        // Not JSON
       }
+
+      const newToken = data?.token ?? data?.accessToken;
+      if (!newToken || typeof newToken !== "string") {
+        _memoryToken = null;
+        return null;
+      }
+
+      // Store in memory only — NOT in localStorage
+      _memoryToken = newToken;
+      return newToken;
+    } catch (err: any) {
+      console.error("[api] Silent refresh failed (Network error?):", err.message);
+      // Don't clear token on network error, just fail this attempt
       return null;
     }
-
-    let data: any = {};
-    const text = await res.text();
-    try {
-      if (text) data = JSON.parse(text);
-    } catch {
-      // Not JSON
-    }
-
-    const newToken = data?.token ?? data?.accessToken;
-    if (!newToken || typeof newToken !== "string") {
-      _memoryToken = null;
-      return null;
-    }
-
-    // Store in memory only — NOT in localStorage
-    _memoryToken = newToken;
-    return newToken;
   })();
 
   try {

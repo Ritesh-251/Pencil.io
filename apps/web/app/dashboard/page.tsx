@@ -5,42 +5,61 @@ import {
   DashboardTab,
 } from "@/components/dashboard/Sidebar";
 import { VerificationBanner } from "@/components/dashboard/VerificationBanner";
+import { InboxView } from "@/components/dashboard/InboxView";
 import { PlannerView } from "@/components/dashboard/PlannerView";
+import { ProfileView } from "@/components/dashboard/ProfileView";
+import { WSClient } from "@/lib/ws";
+import { useAuthStore } from "@/store/auth.store";
 import { useRoomStore } from "@/store/room.store";
+import { useNotificationStore } from "@/store/notification.store";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Folder } from "lucide-react";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("ROOMS");
-  const fetchRooms = useRoomStore((s) => s.fetchRooms);
-  const rooms = useRoomStore((s) => s.rooms);
-  const loading = useRoomStore((s) => s.loading);
+  const { user } = useAuthStore();
+  const { rooms, fetchRooms, loading: roomsLoading } = useRoomStore();
+  const { fetchUnreadCount, incrementUnread } = useNotificationStore();
 
   useEffect(() => {
-    fetchRooms();
-  }, []);
+    if (user) {
+      fetchRooms();
+      fetchUnreadCount();
+
+      // Connect to global notifications pulse
+      const ws = WSClient.getInstance();
+      const token = localStorage.getItem("token");
+      if (token) {
+        ws.connect("DASHBOARD", token, {
+          name: user.name || undefined,
+          avatarUrl: user.avatarUrl || undefined,
+        });
+
+        const unsub = ws.on("notification:new", (payload) => {
+          console.log("[WS] New Notification received:", payload);
+          incrementUnread();
+        });
+
+        return () => {
+          unsub();
+        };
+      }
+    }
+  }, [user, fetchRooms, fetchUnreadCount, incrementUnread]);
 
   const renderContent = () => {
     if (activeTab === "PLANNER") {
       return <PlannerView />;
     }
 
-    if (activeTab === "FILES") {
-      return (
-        <div className="flex flex-col gap-6 h-full">
-          <header>
-            <h2 className="ink-title m-0 text-[1.8rem]">Shared Files</h2>
-            <p className="soft-copy mt-1">
-              Manage documents and images across all your workspaces.
-            </p>
-          </header>
-          <div className="flex-1 flex flex-col items-center justify-center p-12 border border-dashed border-[rgba(26,26,26,0.1)] rounded-[32px]">
-            <Folder className="w-12 h-12 text-[var(--ink-soft)] opacity-20 mb-4" />
-            <p className="soft-copy text-center">No files uploaded yet.</p>
-          </div>
-        </div>
-      );
+    if (activeTab === "INBOX") {
+      return <InboxView />;
+    }
+
+
+    if (activeTab === "PROFILE") {
+      return <ProfileView />;
     }
 
     return (
@@ -52,11 +71,11 @@ export default function DashboardPage() {
               Realtime spaces for drawing, chat, and fast decisions.
             </p>
           </div>
-          <div className="rounded-xl border border-[rgba(26,26,26,.18)] bg-[rgba(255,250,241,.7)] px-3 py-2 text-[0.78rem] font-semibold text-[var(--ink-soft)]">
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.4)] px-3 py-2 text-[0.78rem] font-black text-[var(--ink-soft)] uppercase tracking-widest shadow-sm">
             {rooms.length} active room{rooms.length === 1 ? "" : "s"}
           </div>
         </header>
-        {loading ? (
+        {roomsLoading ? (
           <p className="soft-copy">Loading rooms...</p>
         ) : rooms.length === 0 ? (
           <div className="grid min-h-[58vh] place-items-center p-8">
@@ -88,7 +107,7 @@ export default function DashboardPage() {
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="flex flex-col min-w-0">
         <VerificationBanner />
-        <div className="glass rounded-[20px] p-5 sm:p-6 mt-2 flex-1">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-[24px] p-5 sm:p-8 mt-2 flex-1 shadow-sm">
           {renderContent()}
         </div>
       </main>

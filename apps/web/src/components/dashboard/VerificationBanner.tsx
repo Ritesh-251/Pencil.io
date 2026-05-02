@@ -31,7 +31,7 @@ export const VerificationBanner = () => {
   };
 
   return (
-    <div className="glass flex items-center justify-between gap-4 rounded-[20px] p-4 mb-4 border border-[rgba(26,26,26,0.08)] shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+    <div className="bg-white flex items-center justify-between gap-4 rounded-[24px] p-4 mb-4 border border-[var(--border-subtle)] shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
       <div className="flex items-center gap-3">
         <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
         <p className="soft-copy text-[0.88rem] m-0 font-medium">

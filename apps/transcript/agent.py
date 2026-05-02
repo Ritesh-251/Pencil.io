@@ -207,6 +207,9 @@ async def entrypoint(ctx: JobContext):
     await ctx.connect()
     session = _build_session(stt_model)
 
+    # Track pending tasks to ensure they finish on shutdown
+    pending_tasks = set()
+
     @session.on("user_input_transcribed")
     def on_transcript(event: Any):
         # BUG-10 FIX: Use robust extraction helpers to handle different LiveKit event formats.
@@ -237,18 +240,25 @@ async def entrypoint(ctx: JobContext):
         )
 
         async def publish_then_persist():
-            published = await _publish_transcript_to_room(
-                ctx.room,
-                participant_identity,
-                text,
-                start_ms,
-                payload["endMs"],
-            )
-            if not published:
-                return
-            await _persist_transcript(backend_url, internal_secret, payload)
+            try:
+                published = await _publish_transcript_to_room(
+                    ctx.room,
+                    participant_identity,
+                    text,
+                    start_ms,
+                    payload["endMs"],
+                )
+                if not published:
+                    return
+                await _persist_transcript(backend_url, internal_secret, payload)
+            finally:
+                # Remove from tracking when done
+                task = asyncio.current_task()
+                if task in pending_tasks:
+                    pending_tasks.remove(task)
 
-        asyncio.create_task(publish_then_persist())
+        task = asyncio.create_task(publish_then_persist())
+        pending_tasks.add(task)
 
     try:
         await session.start(
@@ -266,6 +276,17 @@ async def entrypoint(ctx: JobContext):
                 sync_transcription=True,
             ),
         )
+
+        # Keep the entrypoint running until the job is cancelled
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            print("[transcript:shutdown] Job cancelled, waiting for pending tasks...")
+            if pending_tasks:
+                await asyncio.wait(pending_tasks, timeout=5)
+            print("[transcript:shutdown] Cleanup complete.")
+            raise
     except Exception as error:
         raise RuntimeError(
             f"Failed to initialize transcription session for model '{stt_model}'. "

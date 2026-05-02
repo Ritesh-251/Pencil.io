@@ -17,6 +17,7 @@ import roomsRouter from "./routes/rooms.index.routes";
 import internalRouter from "./routes/internal.routes";
 import planningRouter from "./routes/planning.routes";
 import taskRouter from "./routes/tasks.routes";
+import notificationsRouter from "./routes/notifications.routes";
 
 const app: express.Application = express();
 
@@ -86,6 +87,7 @@ app.use("/api/v1/auth", userRouter);
 app.use("/api/v1/rooms", roomsRouter);
 app.use("/api/v1/planning", planningRouter);
 app.use("/api/v1/tasks", taskRouter);
+app.use("/api/v1/notifications", notificationsRouter);
 app.use("/api/internal", internalRouter);
 
 export { app };

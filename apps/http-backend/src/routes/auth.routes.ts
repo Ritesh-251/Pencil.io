@@ -11,6 +11,8 @@ import {
   resendVerification,
   testerLogin,
   getProfile,
+  updateProfile,
+  searchUsers,
 } from "../controller/auth.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 import {
@@ -19,6 +21,8 @@ import {
 } from "../middleware/authRateLimit.middleware";
 
 const router: Router = Router();
+
+router.get("/search", authMiddleware, searchUsers);
 
 /**
  * @openapi
@@ -106,6 +110,7 @@ router.delete("/sessions/:sessionId", authMiddleware, deleteSession);
 
 router.post("/tester", testerLogin);
 router.get("/me", authMiddleware, getProfile);
+router.patch("/me", authMiddleware, updateProfile);
 
 // ── OAuth Routes ──
 import passport from "../infra/passport";

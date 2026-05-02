@@ -196,6 +196,17 @@ export const testerLogin = async (req: Request, res: Response) => {
   }
 };
 
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, bio, avatarUrl } = req.body;
+    const user = await authService.updateProfile(req.userId!, { name, bio, avatarUrl });
+    return res.status(200).json({ user });
+  } catch (error: any) {
+    logger.error({ err: error.message }, "updateProfile failed");
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     const user = await authService.getProfile(req.userId!);
@@ -206,5 +217,15 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
     return res
       .status(status)
       .json({ message: error.message || "Internal server error" });
+  }
+};
+
+export const searchUsers = async (req: AuthRequest, res: Response) => {
+  try {
+    const query = String(req.query.q || "");
+    const users = await authService.searchUsers(query, req.userId!);
+    return res.status(200).json({ users });
+  } catch (error: any) {
+    return res.status(500).json({ message: "Internal server error" });
   }
 };

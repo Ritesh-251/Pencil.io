@@ -53,6 +53,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         isVerified: user.isVerified,
+        avatarUrl: user.avatarUrl,
       },
     };
   }
@@ -115,6 +116,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         isVerified: user.isVerified,
+        avatarUrl: user.avatarUrl,
       },
     };
   }
@@ -175,6 +177,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         isVerified: true,
+        avatarUrl: user.avatarUrl,
       },
     };
   }
@@ -257,11 +260,54 @@ export class AuthService {
         email: true,
         isVerified: true,
         avatarUrl: true,
+        name: true,
+        bio: true,
         createdAt: true,
       },
     });
     if (!user) throw new ApiError(404, "User not found");
     return user;
+  }
+
+  async updateProfile(userId: string, data: { name?: string; bio?: string; avatarUrl?: string }) {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: data.name,
+        bio: data.bio,
+        avatarUrl: data.avatarUrl,
+      },
+      select: {
+        id: true,
+        email: true,
+        isVerified: true,
+        avatarUrl: true,
+        name: true,
+        bio: true,
+      }
+    });
+    return user;
+  }
+
+  async searchUsers(query: string, excludeUserId: string) {
+    if (!query || query.length < 2) return [];
+    
+    logger.info({ query, userId: excludeUserId }, "Searching users");
+
+    // Optimization: If it looks like a prefix, startsWith is faster. 
+    // Otherwise contains is needed for middle-of-email search.
+    return prisma.user.findMany({
+      where: {
+        email: { contains: query, mode: "insensitive" },
+        id: { not: excludeUserId }
+      },
+      select: {
+        id: true,
+        email: true,
+        avatarUrl: true
+      },
+      take: 10
+    });
   }
 }
 

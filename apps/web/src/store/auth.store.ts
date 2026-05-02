@@ -12,6 +12,9 @@ interface AuthState {
     username: string;
     email: string;
     isVerified?: boolean;
+    avatarUrl?: string | null;
+    name?: string | null;
+    bio?: string | null;
   } | null;
   token: string | null;
   setAuth: (user: any, token: string) => void;

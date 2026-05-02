@@ -70,14 +70,14 @@ export const AuthForm = ({ type }: { type: "signin" | "signup" }) => {
               <div className="grid h-10 w-10 place-items-center rounded-[12px] border border-[rgba(26,26,26,.18)] bg-[rgba(13,91,215,.08)] p-1.5">
                 <Image
                   src="/logo.svg"
-                  alt="Pencil.io logo"
+                  alt="MyPencil logo"
                   width={28}
                   height={28}
                   priority
                 />
               </div>
               <span className="text-[1rem] font-bold tracking-[-0.02em]">
-                Pencil.io
+                MyPencil
               </span>
             </div>
             <span className="rounded-full border border-[rgba(13,91,215,.28)] bg-[rgba(13,91,215,.1)] px-2.5 py-1 text-[0.68rem] font-semibold tracking-[0.04em] text-[var(--brand-strong)]">
@@ -270,7 +270,7 @@ export const AuthForm = ({ type }: { type: "signin" | "signup" }) => {
             <span className="line-scribble ml-2 inline-block">alive</span>
           </h3>
           <p className="mt-3 max-w-[420px] text-[0.96rem] leading-[1.55] soft-copy">
-            Pencil.io blends canvas, chat, and media into one cinematic
+            MyPencil blends canvas, chat, and media into one cinematic
             workspace where ideas stay in motion.
           </p>
         </div>

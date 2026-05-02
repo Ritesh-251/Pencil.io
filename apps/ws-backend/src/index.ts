@@ -20,7 +20,7 @@ import { startChatConsumer } from "./consumers/chat.consumer";
 import { startBroadcastConsumer } from "./consumers/broadcast.consumer";
 import { startCanvasConsumer } from "./consumers/canvas.consumer";
 import { prisma } from "@repo/db";
-import { startSocketServer } from "./socketServer";
+import { startSocketServer, socketManager } from "./socketServer";
 import { initRedis, pubsub } from "./infra/redis";
 import { roomManager } from "./manager/roomManager";
 import { startCompactionScheduler } from "./compaction/scheduler";
@@ -54,6 +54,22 @@ async function bootstrap() {
         type: event.type,
         payload: event.payload,
       });
+    });
+
+    pubsub.pSubscribe("notifications:*", (channel, message) => {
+      const userId = channel.split(":")[1];
+      if (!userId) return;
+
+      try {
+        const parsed = JSON.parse(message);
+        // Direct delivery to all user's active sockets
+        socketManager.sendToUser(userId, {
+          type: "notification:new",
+          payload: parsed.notification
+        });
+      } catch (err) {
+        logger.warn({ channel, message }, "Failed to parse notification event");
+      }
     });
 
     const server = await startSocketServer();

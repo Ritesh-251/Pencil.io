@@ -150,6 +150,43 @@ export const rejectJoinRequest = async (req: AuthRequest, res: Response) => {
       .json({ message: error.message || "Internal server error" });
   }
 };
+export const getRoomMembers = async (req: AuthRequest, res: Response) => {
+  try {
+    const roomId = String(req.params.roomId || "");
+    const members = await roomService.listMembers(roomId, req.userId!);
+    return res.status(200).json({ members });
+  } catch (error: any) {
+    const status = error instanceof ApiError ? error.statusCode : 500;
+    return res.status(status).json({ message: error.message || "Internal server error" });
+  }
+};
+
+export const removeRoomMember = async (req: AuthRequest, res: Response) => {
+  try {
+    const roomId = String(req.params.roomId || "");
+    const userIdToRemove = String(req.params.userId || "");
+    const result = await roomService.removeMember(roomId, userIdToRemove, req.userId!);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const status = error instanceof ApiError ? error.statusCode : 500;
+    return res.status(status).json({ message: error.message || "Internal server error" });
+  }
+};
+
+export const updateMemberRole = async (req: AuthRequest, res: Response) => {
+  try {
+    const roomId = String(req.params.roomId || "");
+    const userIdToUpdate = String(req.params.userId || "");
+    const role = req.body.role;
+    if (role !== "ADMIN" && role !== "MEMBER") throw new ApiError(400, "Invalid role");
+    
+    const result = await roomService.updateMemberRole(roomId, userIdToUpdate, role, req.userId!);
+    return res.status(200).json(result);
+  } catch (error: any) {
+    const status = error instanceof ApiError ? error.statusCode : 500;
+    return res.status(status).json({ message: error.message || "Internal server error" });
+  }
+};
 
 // Aliases for route backward compatibility
 export const DeleteRoom = deleteRoom;

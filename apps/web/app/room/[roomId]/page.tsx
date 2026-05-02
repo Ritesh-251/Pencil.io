@@ -6,6 +6,8 @@ import { MediaPanel } from "@/components/workspace/MediaPanel";
 import { TranscriptPanel } from "@/components/workspace/TranscriptPanel";
 import { AIPanel } from "@/components/workspace/AIPanel";
 import { JoinRequestPopup } from "@/components/workspace/JoinRequestPopup";
+import { RoomSettings } from "@/components/workspace/RoomSettings";
+import { ActionCenter } from "@/components/workspace/ActionCenter";
 import { WSClient } from "@/lib/ws";
 import { api, ApiClientError, getAccessToken } from "@/lib/api";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -95,6 +97,7 @@ export default function RoomPage({
         name,
         color: avatarPalette[index % avatarPalette.length],
         initials: name.slice(0, 2).toUpperCase(),
+        avatarUrl: entry?.avatarUrl,
       };
     });
   }, [usersMap, user?.id, user?.username]);
@@ -117,9 +120,12 @@ export default function RoomPage({
 
       const ws = WSClient.getInstance();
       setStatus("connecting");
-      ws.connect(roomId, nextToken);
+      ws.connect(roomId, nextToken, {
+        name: user?.username || user?.email,
+        avatarUrl: user?.avatarUrl
+      });
     },
-    [roomId, setStatus],
+    [roomId, setStatus, user?.username, user?.email, user?.avatarUrl],
   );
 
   useEffect(() => {
@@ -227,7 +233,7 @@ export default function RoomPage({
         ? payload.onlineUsers
         : [];
       for (const u of onlineUsers) {
-        if (u.id) setOnline(u.id, u.name || "User");
+        if (u.id) setOnline(u.id, u.name || "User", u.avatarUrl);
       }
     });
 
@@ -246,11 +252,10 @@ export default function RoomPage({
       const state = payload?.status;
       if (!targetId || typeof targetId !== "string") return;
       if (state === "online") {
-        const name =
-          targetId === user?.id
+        const name = payload.name || (targetId === user?.id
             ? user?.username || "You"
-            : `User ${targetId.slice(0, 6)}`;
-        setOnline(targetId, name);
+            : `User ${targetId.slice(0, 6)}`);
+        setOnline(targetId, name, payload.avatarUrl);
       } else if (state === "offline") {
         setOffline(targetId);
       }
@@ -422,7 +427,7 @@ export default function RoomPage({
   const [showCanvas, setShowCanvas] = useState(true);
   const [showChat, setShowChat] = useState(true);
   const [showMedia, setShowMedia] = useState(true);
-  const [insightTab, setInsightTab] = useState<"chat" | "transcript" | "ai">(
+  const [insightTab, setInsightTab] = useState<"chat" | "transcript" | "ai" | "tasks">(
     "chat",
   );
 
@@ -666,11 +671,15 @@ export default function RoomPage({
                 {presence.slice(0, 3).map((p) => (
                   <div
                     key={p.id}
-                    className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[var(--bg-surface)] text-[0.68rem] font-bold text-white shadow-sm"
+                    className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border-2 border-[var(--bg-surface)] text-[0.68rem] font-bold text-white shadow-sm overflow-hidden"
                     style={{ backgroundColor: p.color }}
                     title={p.name}
                   >
-                    {p.initials}
+                    {p.avatarUrl && p.avatarUrl.trim() !== "" ? (
+                      <img src={p.avatarUrl} alt={p.name} className="w-full h-full object-cover" />
+                    ) : (
+                      p.initials
+                    )}
                     <span className="absolute -bottom-px -right-px h-2 w-2 rounded-full border border-[var(--bg-base)] bg-[#2f6340]" />
                   </div>
                 ))}
@@ -719,6 +728,9 @@ export default function RoomPage({
             <IconShare />
             {copied ? "Copied ✓" : "Share"}
           </button>
+
+          {/* Room Settings */}
+          <RoomSettings roomId={roomId} isHost={isHost} />
         </div>
       </header>
 
@@ -821,28 +833,26 @@ export default function RoomPage({
               }}
             >
               <div className="flex h-full min-h-0 flex-col gap-2">
-                <div className="glass flex shrink-0 items-center gap-1 rounded-[14px] px-2 py-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setInsightTab("chat")}
-                    className={`btn btn-sm ${insightTab === "chat" ? "btn-primary" : "btn-outline"}`}
-                  >
-                    Chat
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInsightTab("transcript")}
-                    className={`btn btn-sm ${insightTab === "transcript" ? "btn-primary" : "btn-outline"}`}
-                  >
-                    Transcript
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInsightTab("ai")}
-                    className={`btn btn-sm ${insightTab === "ai" ? "btn-primary" : "btn-outline"}`}
-                  >
-                    AI
-                  </button>
+                <div className="flex p-1 bg-[rgba(26,26,26,0.05)] rounded-[14px] border border-[rgba(26,26,26,0.03)] backdrop-blur-sm shrink-0">
+                  {[
+                    { id: "chat", label: "Chat" },
+                    { id: "transcript", label: "Transcript" },
+                    { id: "ai", label: "AI" },
+                    { id: "tasks", label: "Tasks" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setInsightTab(tab.id as any)}
+                      className={`flex-1 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-[10px] transition-all duration-200 ${
+                        insightTab === tab.id
+                          ? "bg-white text-indigo-600 shadow-sm ring-1 ring-[rgba(0,0,0,0.04)]"
+                          : "text-[var(--ink-soft)] hover:text-indigo-500 hover:bg-[rgba(255,255,255,0.3)]"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-hidden">
@@ -869,6 +879,14 @@ export default function RoomPage({
                     }}
                   >
                     <AIPanel roomId={roomId} />
+                  </div>
+                  <div
+                    style={{
+                      display: insightTab === "tasks" ? "block" : "none",
+                      height: "100%",
+                    }}
+                  >
+                    <ActionCenter roomId={roomId} />
                   </div>
                 </div>
               </div>

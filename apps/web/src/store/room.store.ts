@@ -27,6 +27,7 @@ export interface PresenceUser {
   id: string;
   name: string;
   status?: "online" | "offline";
+  avatarUrl?: string | null;
 }
 
 // ─── Room Store ───────────────────────────────────────────────────────────────
@@ -80,16 +81,16 @@ export const useChatStore = create<ChatState>((set) => ({
 
 interface PresenceState {
   users: Map<string, PresenceUser>;
-  setOnline: (id: string, name: string) => void;
+  setOnline: (id: string, name: string, avatarUrl?: string | null) => void;
   setOffline: (id: string) => void;
 }
 
 export const usePresenceStore = create<PresenceState>((set) => ({
   users: new Map(),
-  setOnline: (id, name) =>
+  setOnline: (id, name, avatarUrl) =>
     set((s) => {
       const next = new Map(s.users);
-      next.set(id, { id, name, status: "online" });
+      next.set(id, { id, name, status: "online", avatarUrl });
       return { users: next };
     }),
   setOffline: (id) =>

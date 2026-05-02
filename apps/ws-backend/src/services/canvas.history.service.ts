@@ -19,7 +19,7 @@ export async function saveHistory(
     objectId: string;
     before: prisma.JsonValue;
     after: prisma.JsonValue;
-    version: number;
+    version: bigint;
     eventId: string;
     timestamp?: number;
     time: number;
@@ -108,7 +108,7 @@ async function applyPatch(
     roomId: string;
     userId: string;
     objectId: string;
-    version: number;
+    version: bigint;
     logicalTimestamp: LogicalTimestamp;
     props: Record<string, any>;
   },
@@ -152,7 +152,7 @@ async function applyPatch(
 async function applyInverse(
   tx: prisma.TransactionClient,
   action: any,
-  version: number,
+  version: bigint,
   logicalTimestamp: LogicalTimestamp,
 ) {
   if (!action.objectId) return;
@@ -175,7 +175,7 @@ async function applyInverse(
 async function applyForward(
   tx: prisma.TransactionClient,
   action: any,
-  version: number,
+  version: bigint,
   logicalTimestamp: LogicalTimestamp,
 ) {
   if (!action.objectId) return;
@@ -199,7 +199,7 @@ export async function handleUndo(
   tx: prisma.TransactionClient,
   roomId: string,
   userId: string,
-  version: number,
+  version: bigint,
   logicalTimestamp: LogicalTimestamp,
 ) {
   // 1. find last NOT undone action
@@ -277,7 +277,7 @@ export async function handleRedo(
   tx: prisma.TransactionClient,
   roomId: string,
   userId: string,
-  version: number,
+  version: bigint,
   logicalTimestamp: LogicalTimestamp,
 ) {
   // 1. find last undone action

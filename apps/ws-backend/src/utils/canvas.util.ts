@@ -1,7 +1,7 @@
 import { prisma, SnapshotType } from "@repo/db";
 import { logger } from "../infra/logger";
 
-export async function triggerSnapshot(roomId: string, version: number) {
+export async function triggerSnapshot(roomId: string, version: bigint) {
   // async, non-blocking
   setImmediate(async () => {
     try {
@@ -41,17 +41,17 @@ export async function triggerSnapshot(roomId: string, version: number) {
         },
       });
 
-      // cleanup old snapshots
+      // cleanup old snapshots (keep roughly 1000 seconds of history)
       await prisma.canvasSnapshot.deleteMany({
         where: {
           roomId,
-          version: { lt: version - 1000 },
+          version: { lt: version - 1000000n },
         },
       });
 
-      logger.info({ roomId, version }, "Snapshot created");
+      logger.info({ roomId, version: version.toString() }, "Snapshot created");
     } catch (err) {
-      logger.error({ err, roomId, version }, "Snapshot error");
+      logger.error({ err, roomId, version: version.toString() }, "Snapshot error");
     }
   });
 }

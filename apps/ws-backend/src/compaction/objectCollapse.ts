@@ -9,7 +9,8 @@ export type CollapseEvent = EventWithPatch & {
   actionType: CanvasActionType;
   time: bigint | null;
   actorId: string | null;
-  version: number;
+  version: bigint;
+  isUndone: boolean;
   createdAt: Date;
 };
 
@@ -22,7 +23,7 @@ export type CollapsedEvent = {
   actionType: CanvasActionType;
   time: bigint;
   actorId: string;
-  version: number;
+  version: bigint;
   createdAt: Date;
 };
 

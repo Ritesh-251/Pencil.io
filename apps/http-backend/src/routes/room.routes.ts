@@ -10,6 +10,9 @@ import {
   getJoinRequests,
   approveJoinRequest,
   rejectJoinRequest,
+  getRoomMembers,
+  removeRoomMember,
+  updateMemberRole,
 } from "../controller/room.controller";
 import {
   issueRoomMediaToken,
@@ -38,6 +41,10 @@ router.post("/:roomId/transcribe", authMiddleware, startTranscription);
 router.post("/:roomId/transcribe/stop", authMiddleware, stopTranscription);
 
 router.post("/:roomId/leave", authMiddleware, leaveRoom);
+
+router.get("/:roomId/members", authMiddleware, getRoomMembers);
+router.delete("/:roomId/members/:userId", authMiddleware, removeRoomMember);
+router.patch("/:roomId/members/:userId/role", authMiddleware, updateMemberRole);
 
 router.patch("/:roomId", authMiddleware, updateRoomName);
 

@@ -12,8 +12,8 @@ function readPatchProps(after: unknown): JsonRecord {
 
 export async function createDeltaSnapshot(
   roomId: string,
-  fromVersion: number,
-  toVersion: number,
+  fromVersion: bigint,
+  toVersion: bigint,
 ) {
   if (toVersion <= fromVersion) return;
 
@@ -31,9 +31,9 @@ export async function createDeltaSnapshot(
   const changes = events.map((event) => ({
     objectId: event.objectId,
     patch: readPatchProps(event.after),
-    version: event.version,
+    version: Number(event.version),
     actorId: event.actorId ?? event.userId,
-    time: event.time ? Number(event.time) : event.version,
+    time: Number(event.time ?? event.version),
   }));
 
   await prisma.canvasSnapshot.create({

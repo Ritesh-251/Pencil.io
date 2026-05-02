@@ -37,6 +37,8 @@ export const handleRoomJoin = async function (
         payload: {
           userId: socket.userId,
           status: "online",
+          name: socket.name,
+          avatarUrl: socket.avatarUrl,
         },
       });
     }

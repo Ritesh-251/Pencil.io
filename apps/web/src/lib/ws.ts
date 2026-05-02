@@ -25,7 +25,7 @@ export class WSClient {
     return WSClient.instance;
   }
 
-  connect(roomId: string, token: string) {
+  connect(roomId: string, token: string, user?: { name?: string; avatarUrl?: string | null }) {
     if (
       this.ws &&
       (this.ws.readyState === WebSocket.OPEN ||
@@ -62,7 +62,14 @@ export class WSClient {
     this.ws = new WebSocket(finalUrl);
 
     this.ws.onopen = () => {
-      this.ws?.send(JSON.stringify({ type: "auth", payload: { token } }));
+      this.ws?.send(JSON.stringify({ 
+        type: "auth", 
+        payload: { 
+          token,
+          name: user?.name,
+          avatarUrl: user?.avatarUrl
+        } 
+      }));
     };
 
     this.ws.onmessage = (e) => {

@@ -36,10 +36,12 @@ function isBoundaryEvent(event: {
   actionType: CanvasActionType;
   referenceActionId?: string | null;
   after: Prisma.JsonValue;
+  isUndone: boolean;
 }) {
   if (
     event.actionType === CanvasActionType.UNDO ||
-    event.actionType === CanvasActionType.REDO
+    event.actionType === CanvasActionType.REDO ||
+    event.isUndone // 🔥 CONCURRENCY FIX: CONC-2 (Data Loss) - Protect history
   ) {
     return true;
   }

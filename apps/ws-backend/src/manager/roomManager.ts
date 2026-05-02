@@ -190,9 +190,20 @@ export class RoomManager {
   }
 
   getOnlineUsers(roomId: string) {
-    const users = this.roomUsers.get(roomId);
-    if (!users) return [];
-    return Array.from(users.keys()).map((id) => ({ id, name: "Online User" }));
+    const sockets = this.roomSockets.get(roomId);
+    if (!sockets) return [];
+
+    const userMap = new Map<string, { id: string; name?: string; avatarUrl?: string | null }>();
+    for (const s of sockets) {
+      if (s.userId && !userMap.has(s.userId)) {
+        userMap.set(s.userId, {
+          id: s.userId,
+          name: s.name,
+          avatarUrl: s.avatarUrl
+        });
+      }
+    }
+    return Array.from(userMap.values());
   }
 }
 

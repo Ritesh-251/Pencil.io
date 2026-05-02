@@ -1,6 +1,11 @@
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
+import express from "express";
+import cors from "cors";
 import { SocketManager } from "./socketManager";
+import { createStorageService } from "@repo/storage";
+
+export const socketManager = new SocketManager();
 import {
   getHealthStatus,
   getInternalStatus,
@@ -17,68 +22,16 @@ import { getUserIdFromAuthHeader } from "./utils/auth.util";
 import {
   normalizeHeaderValue,
   resolveCorsOrigin,
-  withCorsHeaders,
 } from "./utils/http.util";
+import { createRedisRateLimiter } from "./middleware/rateLimit.middleware";
 
-const requestCounters = new Map<string, { count: number; resetAt: number }>();
-const MAX_REQUEST_COUNTER_KEYS = Number(
-  process.env.MAX_REQUEST_COUNTER_KEYS || 50_000,
-);
-
-function getClientIp(req: any) {
+function getClientIp(req: express.Request) {
   const forwarded = req.headers?.["x-forwarded-for"];
   if (typeof forwarded === "string" && forwarded.length > 0) {
     return forwarded.split(",")[0]?.trim() || "unknown";
   }
 
   return req.socket?.remoteAddress || "unknown";
-}
-
-function cleanupRequestCounters(now: number) {
-  for (const [key, value] of requestCounters.entries()) {
-    if (value.resetAt <= now) {
-      requestCounters.delete(key);
-    }
-  }
-
-  if (requestCounters.size <= MAX_REQUEST_COUNTER_KEYS) {
-    return;
-  }
-
-  const overflow = requestCounters.size - MAX_REQUEST_COUNTER_KEYS;
-  let removed = 0;
-  for (const key of requestCounters.keys()) {
-    requestCounters.delete(key);
-    removed += 1;
-    if (removed >= overflow) break;
-  }
-}
-
-function isRateLimited(key: string, limit: number, windowMs: number) {
-  const now = Date.now();
-  cleanupRequestCounters(now);
-  const current = requestCounters.get(key);
-
-  if (!current || current.resetAt <= now) {
-    requestCounters.set(key, { count: 1, resetAt: now + windowMs });
-    return false;
-  }
-
-  if (current.count >= limit) {
-    return true;
-  }
-
-  current.count += 1;
-  requestCounters.set(key, current);
-  return false;
-}
-
-function sendJson(req: any, res: any, statusCode: number, body: unknown) {
-  res.writeHead(
-    statusCode,
-    withCorsHeaders(req, { "content-type": "application/json" }),
-  );
-  res.end(JSON.stringify(body));
 }
 
 const LOCAL_UPLOAD_ROOT = path.resolve(process.cwd(), ".uploads");
@@ -127,7 +80,7 @@ function sanitizeUploadPath(
 }
 
 async function readRawBody(
-  req: any,
+  req: express.Request,
   limitBytes = 16 * 1024 * 1024,
 ): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -165,14 +118,9 @@ async function fetchUploadFromPeers(
   return null;
 }
 
-function isInternalAuthorized(req: any) {
+function isInternalAuthorized(req: express.Request) {
   const adminToken = process.env.INTERNAL_SECRET;
 
-  // SEC-3 FIX: Development mode no longer grants blanket access.
-  // If a token is configured we always check it, regardless of NODE_ENV.
-  // Without a token in development we log a warning and allow through so
-  // local tooling still works, but an accidental NODE_ENV=development in
-  // staging with a configured token is still protected.
   if (process.env.NODE_ENV === "development" && !adminToken) {
     logger.warn(
       "INTERNAL_SECRET not set — internal endpoints unprotected (development only)",
@@ -199,139 +147,125 @@ function roomIdFromUploadRelativePath(relativePath: string) {
 }
 
 export async function startSocketServer() {
+  const app = express();
+  const server = createServer(app);
   const port = Number(process.env.PORT) || 3002;
-  const server = createServer(async (req, res) => {
-    const origin = resolveCorsOrigin(req);
-    if (req.headers.origin && !origin) {
-      res.writeHead(403, { "content-type": "text/plain" });
-      res.end("Origin not allowed");
+
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Mock the resolveCorsOrigin logic for express-cors
+      if (!origin) return callback(null, true);
+      const allowed = resolveCorsOrigin({ headers: { origin } } as any);
+      if (allowed) callback(null, true);
+      else callback(new Error("Origin not allowed"));
+    }
+  }));
+
+  // HEALTH
+  app.get("/health", async (req, res) => {
+    const health = await getHealthStatus();
+    res.status(health.status === "ok" ? 200 : 503).json(health);
+  });
+
+  // UPLOAD PUT (Binary)
+  app.put("/upload/*", createRedisRateLimiter(120, "upload-put"), async (req, res) => {
+    const urlPath = req.path;
+    const uploadPath = sanitizeUploadPath(urlPath);
+    if (!uploadPath) {
+      res.status(400).send("Invalid upload path");
       return;
     }
 
-    if (!req.url) {
-      res.writeHead(400, withCorsHeaders(req));
-      res.end("Bad Request");
+    const authHeader = normalizeHeaderValue(req.headers.authorization);
+    const userId = getUserIdFromAuthHeader(authHeader);
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
-    if (req.method === "OPTIONS") {
-      res.writeHead(204, withCorsHeaders(req));
-      res.end();
+    const roomId = roomIdFromUploadRelativePath(uploadPath.relativePath);
+    if (!roomId) {
+      res.status(400).json({ message: "Invalid upload object key" });
       return;
     }
 
-    const parsedUrl = new URL(req.url, "http://localhost");
+    try {
+      await assertRoomMember(userId, roomId);
+    } catch {
+      res.status(403).json({ message: "Not a member of this room" });
+      return;
+    }
 
-    if (parsedUrl.pathname.startsWith("/upload/")) {
-      const uploadPath = sanitizeUploadPath(parsedUrl.pathname);
-      if (!uploadPath) {
-        res.writeHead(400, withCorsHeaders(req));
-        res.end("Invalid upload path");
+    const uploadSignature = normalizeHeaderValue(req.headers["x-upload-token"]);
+    const uploadExpiresRaw = normalizeHeaderValue(req.headers["x-upload-expires"]);
+    const uploadContentType = normalizeHeaderValue(req.headers["x-upload-content-type"]);
+    const contentType = normalizeHeaderValue(req.headers["content-type"]);
+    const expiresAt = Number(uploadExpiresRaw || "0");
+
+    if (!uploadSignature || !uploadContentType || !Number.isFinite(expiresAt)) {
+      res.status(400).json({ message: "Missing upload signature headers" });
+      return;
+    }
+
+    if (contentType !== uploadContentType) {
+      res.status(400).json({ message: "Content type mismatch" });
+      return;
+    }
+
+    const validUploadTicket = verifyImageUploadTicketForPut({
+      objectKey: uploadPath.relativePath,
+      contentType: uploadContentType,
+      expiresAt,
+      userId,
+      signature: uploadSignature,
+    });
+
+    if (!validUploadTicket) {
+      res.status(403).json({ message: "Invalid or expired upload signature" });
+      return;
+    }
+
+    try {
+      const body = await readRawBody(req);
+      await storageService.uploadBuffer(body, uploadPath.relativePath);
+      res.writeHead(200, withCorsHeaders(req));
+      res.end("OK");
+    } catch (error) {
+      logger.error({ error }, "Failed to write uploaded image");
+      res.writeHead(500, withCorsHeaders(req));
+      res.end("Upload failed");
+    }
+  });
+
+  // UPLOAD GET (SECURED)
+  app.get("/upload/*", async (req, res) => {
+    const urlPath = req.path;
+    const uploadPath = sanitizeUploadPath(urlPath);
+    if (!uploadPath) {
+      res.status(400).send("Invalid path");
+      return;
+    }
+
+    const authHeader = normalizeHeaderValue(req.headers.authorization);
+    const userId = getUserIdFromAuthHeader(authHeader);
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const roomId = roomIdFromUploadRelativePath(uploadPath.relativePath);
+    if (roomId) {
+      try {
+        await assertRoomMember(userId, roomId);
+      } catch {
+        res.status(403).json({ message: "Not a member of this room" });
         return;
       }
+    }
 
-      if (req.method === "PUT") {
-        const clientIp = getClientIp(req);
-        if (isRateLimited(`upload-put:${clientIp}`, 120, 60_000)) {
-          sendJson(req, res, 429, { message: "Too many upload PUT requests" });
-          return;
-        }
-
-        const authHeader = normalizeHeaderValue(req.headers.authorization);
-        const userId = getUserIdFromAuthHeader(authHeader);
-        if (!userId) {
-          sendJson(req, res, 401, { message: "Unauthorized" });
-          return;
-        }
-
-        const roomId = roomIdFromUploadRelativePath(uploadPath.relativePath);
-        if (!roomId) {
-          sendJson(req, res, 400, { message: "Invalid upload object key" });
-          return;
-        }
-
-        try {
-          await assertRoomMember(userId, roomId);
-        } catch {
-          sendJson(req, res, 403, { message: "Not a member of this room" });
-          return;
-        }
-
-        const uploadSignature = normalizeHeaderValue(
-          req.headers["x-upload-token"],
-        );
-        const uploadExpiresRaw = normalizeHeaderValue(
-          req.headers["x-upload-expires"],
-        );
-        const uploadContentType = normalizeHeaderValue(
-          req.headers["x-upload-content-type"],
-        );
-        const contentType = normalizeHeaderValue(req.headers["content-type"]);
-        const expiresAt = Number(uploadExpiresRaw || "0");
-
-        if (
-          !uploadSignature ||
-          !uploadContentType ||
-          !Number.isFinite(expiresAt)
-        ) {
-          sendJson(req, res, 400, {
-            message: "Missing upload signature headers",
-          });
-          return;
-        }
-
-        if (contentType !== uploadContentType) {
-          sendJson(req, res, 400, { message: "Content type mismatch" });
-          return;
-        }
-
-        const validUploadTicket = verifyImageUploadTicketForPut({
-          objectKey: uploadPath.relativePath,
-          contentType: uploadContentType,
-          expiresAt,
-          userId,
-          signature: uploadSignature,
-        });
-
-        if (!validUploadTicket) {
-          sendJson(req, res, 403, {
-            message: "Invalid or expired upload signature",
-          });
-          return;
-        }
-
-        try {
-          const body = await readRawBody(req);
-          const dir = path.dirname(uploadPath.absolutePath);
-          await fs.promises.mkdir(dir, { recursive: true });
-          await fs.promises.writeFile(uploadPath.absolutePath, body);
-          res.writeHead(200, withCorsHeaders(req));
-          res.end("OK");
-        } catch (error) {
-          logger.error({ error }, "Failed to write uploaded image");
-          res.writeHead(500, withCorsHeaders(req));
-          res.end("Upload failed");
-        }
-        return;
-      }
-
-      if (req.method === "GET") {
-        if (!fs.existsSync(uploadPath.absolutePath)) {
-          const remoteData = await fetchUploadFromPeers(
-            uploadPath.relativePath,
-          );
-          if (!remoteData) {
-            res.writeHead(404, withCorsHeaders(req));
-            res.end("Not Found");
-            return;
-          }
-
-          const dir = path.dirname(uploadPath.absolutePath);
-          await fs.promises.mkdir(dir, { recursive: true });
-          await fs.promises.writeFile(uploadPath.absolutePath, remoteData);
-        }
-
-        const stream = fs.createReadStream(uploadPath.absolutePath);
+    if (req.method === "GET") {
+      try {
+        const stream = storageService.getDownloadStream(uploadPath.relativePath);
         res.writeHead(
           200,
           withCorsHeaders(req, {
@@ -340,63 +274,52 @@ export async function startSocketServer() {
           }),
         );
         stream.pipe(res);
-        return;
+        stream.on("error", (err: any) => {
+          logger.error({ err }, "Storage stream error");
+          if (!res.headersSent) {
+            res.writeHead(404, withCorsHeaders(req));
+            res.end("Not Found");
+          }
+        });
+      } catch (error) {
+        res.writeHead(404, withCorsHeaders(req));
+        res.end("Not Found");
       }
+      return;
+    }
+  });
 
-      res.writeHead(405, withCorsHeaders(req));
-      res.end("Method Not Allowed");
+  // UPLOAD URL REQUEST
+  app.post("/upload-url", createRedisRateLimiter(30, "upload-url"), async (req, res) => {
+    await handleUploadUrlRequest(req as any, res as any);
+  });
+
+  // INTERNAL
+  app.get("/internal/status", async (req, res) => {
+    if (!isInternalAuthorized(req)) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const status = await getInternalStatus();
+    res.status(200).json(status);
+  });
+
+  app.get("/internal/replay-check", async (req, res) => {
+    if (!isInternalAuthorized(req)) {
+      res.status(401).json({ message: "Unauthorized" });
       return;
     }
 
-    if (parsedUrl.pathname === "/upload-url" && req.method === "POST") {
-      const clientIp = getClientIp(req);
-      if (isRateLimited(`upload:${clientIp}`, 30, 60_000)) {
-        sendJson(req, res, 429, { message: "Too many upload-url requests" });
-        return;
-      }
+    const roomId = req.query.roomId as string;
+    const limit = Number(req.query.limit || 200);
 
-      await handleUploadUrlRequest(req as any, res as any);
+    if (!roomId) {
+      res.status(400).json({ message: "roomId is required" });
       return;
     }
 
-    if (parsedUrl.pathname === "/health") {
-      const health = await getHealthStatus();
-      sendJson(req, res, health.status === "ok" ? 200 : 503, health);
-      return;
-    }
-
-    if (parsedUrl.pathname === "/internal/status") {
-      if (!isInternalAuthorized(req)) {
-        sendJson(req, res, 401, { message: "Unauthorized" });
-        return;
-      }
-
-      const status = await getInternalStatus();
-      sendJson(req, res, 200, status);
-      return;
-    }
-
-    if (parsedUrl.pathname === "/internal/replay-check") {
-      if (!isInternalAuthorized(req)) {
-        sendJson(req, res, 401, { message: "Unauthorized" });
-        return;
-      }
-
-      const roomId = parsedUrl.searchParams.get("roomId");
-      const limit = Number(parsedUrl.searchParams.get("limit") || 200);
-
-      if (!roomId) {
-        sendJson(req, res, 400, { message: "roomId is required" });
-        return;
-      }
-
-      const result = await runReplayCheck(roomId, limit);
-      sendJson(req, res, 200, result);
-      return;
-    }
-
-    res.writeHead(404, withCorsHeaders(req));
-    res.end("Not Found");
+    const result = await runReplayCheck(roomId, limit);
+    res.status(200).json(result);
   });
 
   const wss = new WebSocketServer({
@@ -430,6 +353,5 @@ export async function startSocketServer() {
   });
 
   logger.info({ port }, "WebSocket server running");
-  // Q-12: Return the server so the caller can close it gracefully on SIGTERM.
   return server;
 }

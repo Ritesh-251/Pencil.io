@@ -38,15 +38,9 @@ function updateRoomEventCount(roomId: string) {
   roomEventCountSinceSnapshot.set(roomId, current);
   return current;
 }
-const MAX_DB_INT = 2_147_483_647;
-
-function toDbVersion(logicalTimeMs: number) {
-  // Prisma schema stores version as Int; logical clock is in ms and exceeds int32.
-  // Persist epoch seconds to keep ordering while staying inside integer limits.
-  const seconds = Math.floor(logicalTimeMs / 1000);
-  if (seconds > MAX_DB_INT) return MAX_DB_INT;
-  if (seconds < 0) return 0;
-  return seconds;
+function toDbVersion(logicalTimeMs: number): bigint {
+  // Logical clock is in ms. Persist as BigInt to maintain full precision.
+  return BigInt(Math.floor(logicalTimeMs));
 }
 
 function mapCanvasActionToHistoryAction(action: string): CanvasActionType {
@@ -396,8 +390,24 @@ export async function startCanvasConsumer() {
         "Canvas consumer error",
       );
 
-      // Dead-letter permanent poison messages instead of requeueing forever.
-      channel.nack(msg, false, false);
+      // Simple retry logic: requeue once, then dead-letter.
+      // RabbitMQ x-death header tracks delivery attempts.
+      const deathHeader = msg.properties.headers?.["x-death"]?.[0];
+      const retryCount = deathHeader?.count || 0;
+
+      if (retryCount < 3) {
+        logger.warn(
+          { eventId: event.id, retryCount },
+          "Canvas consumer: transient error, requeueing",
+        );
+        channel.nack(msg, false, true); // requeue = true
+      } else {
+        logger.error(
+          { eventId: event.id, retryCount },
+          "Canvas consumer: max retries reached, dead-lettering",
+        );
+        channel.nack(msg, false, false); // requeue = false (sends to DLX)
+      }
     }
   });
 }

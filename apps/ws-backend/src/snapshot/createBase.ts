@@ -1,7 +1,7 @@
 import { prisma, SnapshotType } from "@repo/db";
 import { compressSnapshotData } from "./compress";
 
-export async function createBaseSnapshot(roomId: string, version: number) {
+export async function createBaseSnapshot(roomId: string, version: bigint) {
   const objects = await prisma.canvasObject.findMany({
     where: {
       roomId,

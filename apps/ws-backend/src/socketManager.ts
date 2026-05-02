@@ -34,11 +34,28 @@ const WRITE_EVENTS = new Set([
 export class SocketManager {
   private router = new EventRouter();
   private rateMap: Map<string, RateEntry> = new Map();
+  private userSockets: Map<string, Set<AuthenticatedSocket>> = new Map();
 
   handleConnection(socket: WebSocket, request: IncomingMessage) {
     const ws = socket as AuthenticatedSocket;
     ws.id = randomUUID();
     ws.isAuthenticating = false;
+    ws.isAlive = true;
+
+    // 🔥 MEMORY FIX: WS-1 (Ghost Connections)
+    // Setup heartbeat to detect broken connections that didn't close properly
+    const heartbeat = setInterval(() => {
+      if (ws.isAlive === false) {
+        logger.warn({ socketId: ws.id, userId: ws.userId }, "Ghost socket detected — terminating");
+        return ws.terminate();
+      }
+      ws.isAlive = false;
+      ws.ping();
+    }, 30000);
+
+    ws.on("pong", () => {
+      ws.isAlive = true;
+    });
 
     const authTimeout = setTimeout(() => {
       if (!ws.userId) {
@@ -85,6 +102,7 @@ export class SocketManager {
 
     ws.on("close", () => {
       clearTimeout(authTimeout);
+      clearInterval(heartbeat);
       if (ws.userId) {
         void this.handleDisconnect(ws).catch((err) => {
           recordError();
@@ -131,7 +149,18 @@ export class SocketManager {
     }
 
     socket.userId = userId;
+    socket.name = parsed.payload.name;
+    socket.avatarUrl = parsed.payload.avatarUrl;
     socket.isAuthenticating = false;
+
+    // Register user socket
+    let sockets = this.userSockets.get(userId);
+    if (!sockets) {
+      sockets = new Set();
+      this.userSockets.set(userId, sockets);
+    }
+    sockets.add(socket);
+
     logger.info(
       { userId: socket.userId, socketId: socket.id },
       "Socket authenticated",
@@ -222,6 +251,18 @@ export class SocketManager {
     // BUG-5 FIX: Remove the socket from all rooms BEFORE broadcasting so the
     // disconnecting user does not receive its own "offline" event.
     const offlineRoomIds = roomManager.removeSocket(socket) || [];
+    
+    // Unregister user socket
+    if (socket.userId) {
+      const sockets = this.userSockets.get(socket.userId);
+      if (sockets) {
+        sockets.delete(socket);
+        if (sockets.size === 0) {
+          this.userSockets.delete(socket.userId);
+        }
+      }
+    }
+
     if (socket.id) {
       this.rateMap.delete(socket.id);
     }
@@ -247,5 +288,17 @@ export class SocketManager {
       { userId: socket.userId, socketId: socket.id },
       "Socket disconnected",
     );
+  }
+
+  sendToUser(userId: string, event: any) {
+    const sockets = this.userSockets.get(userId);
+    if (!sockets) return;
+
+    const message = JSON.stringify(event);
+    for (const socket of sockets) {
+      if (socket.readyState === socket.OPEN) {
+        socket.send(message);
+      }
+    }
   }
 }

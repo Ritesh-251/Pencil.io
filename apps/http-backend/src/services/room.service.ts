@@ -67,20 +67,18 @@ export class RoomService {
 
     // Public room: Join immediately
     const result = await prisma.$transaction(async (tx) => {
-      let updated = await tx.room.updateMany({
+      // 🔥 CONCURRENCY FIX: CONC-1 (Race Condition)
+      // Atomic increment with capacity check (100 members max)
+      const roomUpdate = await tx.room.update({
         where: { id: roomId, memberCount: { lt: 100 } },
         data: { memberCount: { increment: 1 } },
+        select: { id: true }
+      }).catch(err => {
+        // If the 'where' condition fails (e.g. memberCount >= 100), update returns null or throws.
+        // Prisma throws P2025 (Record to update not found) if the where doesn't match.
+        if (err.code === 'P2025') throw new ApiError(400, "Room is full");
+        throw err;
       });
-
-      if (updated.count === 0) {
-        const actualCount = await tx.roomMember.count({ where: { roomId } });
-        if (actualCount >= 100) throw new ApiError(400, "Room is full");
-
-        await tx.room.update({
-          where: { id: roomId },
-          data: { memberCount: actualCount + 1 },
-        });
-      }
 
       await tx.roomMember.create({ data: { userId, roomId, role: "MEMBER" } });
 
@@ -109,8 +107,11 @@ export class RoomService {
       });
 
       if (updatedRoom.memberCount === 0) {
-        await tx.room.delete({ where: { id: roomId } });
-        return { message: "Left and room deleted" };
+        await tx.room.update({
+          where: { id: roomId },
+          data: { isArchived: true }
+        });
+        return { message: "Left and room archived" };
       }
 
       if (room.createdBy === userId) {
@@ -146,7 +147,10 @@ export class RoomService {
 
   async listUserRooms(userId: string) {
     const memberships = await prisma.roomMember.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        room: { isArchived: false }
+      },
       include: {
         room: {
           select: {
@@ -239,20 +243,15 @@ export class RoomService {
       });
 
       if (!existingMember) {
-        const updated = await tx.room.updateMany({
+        // 🔥 CONCURRENCY FIX: CONC-1 (Race Condition)
+        // Atomic increment with capacity check (100 members max)
+        await tx.room.update({
           where: { id: roomId, memberCount: { lt: 100 } },
           data: { memberCount: { increment: 1 } },
+        }).catch(err => {
+          if (err.code === 'P2025') throw new ApiError(400, "Room is full");
+          throw err;
         });
-
-        if (updated.count === 0) {
-          const actualCount = await tx.roomMember.count({ where: { roomId } });
-          if (actualCount >= 100) throw new ApiError(400, "Room is full");
-
-          await tx.room.update({
-            where: { id: roomId },
-            data: { memberCount: actualCount + 1 },
-          });
-        }
 
         await tx.roomMember.create({
           data: { userId: request.userId, roomId, role: "MEMBER" },
@@ -303,7 +302,7 @@ export class RoomService {
       where: { id: roomId },
       include: {
         members: {
-          include: { user: { select: { id: true, email: true } } },
+          include: { user: { select: { id: true, email: true, avatarUrl: true } } },
         },
       },
     });
@@ -316,6 +315,59 @@ export class RoomService {
     }
 
     return room;
+  }
+
+  async listMembers(roomId: string, userId: string) {
+    // Check if user is a member or if the room is public
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      select: { visibility: true, members: { select: { userId: true } } }
+    });
+    if (!room) throw new ApiError(404, "Room not found");
+
+    const isMember = room.members.some(m => m.userId === userId);
+    if (room.visibility === "PRIVATE" && !isMember) {
+      throw new ApiError(403, "Access denied");
+    }
+
+    return prisma.roomMember.findMany({
+      where: { roomId },
+      include: {
+        user: { select: { id: true, email: true, avatarUrl: true } }
+      },
+      orderBy: { role: "asc" }
+    });
+  }
+
+  async removeMember(roomId: string, memberUserId: string, adminUserId: string) {
+    const admin = await prisma.roomMember.findUnique({
+      where: { userId_roomId: { userId: adminUserId, roomId } }
+    });
+    if (!admin || admin.role !== "ADMIN") throw new ApiError(403, "Only admins can remove members");
+
+    if (memberUserId === adminUserId) throw new ApiError(400, "Cannot remove yourself. Use leave instead.");
+
+    await prisma.$transaction([
+      prisma.roomMember.delete({ where: { userId_roomId: { userId: memberUserId, roomId } } }),
+      prisma.room.update({
+        where: { id: roomId },
+        data: { memberCount: { decrement: 1 } }
+      })
+    ]);
+
+    return { message: "Member removed" };
+  }
+
+  async updateMemberRole(roomId: string, memberUserId: string, role: "ADMIN" | "MEMBER", adminUserId: string) {
+    const admin = await prisma.roomMember.findUnique({
+      where: { userId_roomId: { userId: adminUserId, roomId } }
+    });
+    if (!admin || admin.role !== "ADMIN") throw new ApiError(403, "Only admins can update roles");
+
+    return prisma.roomMember.update({
+      where: { userId_roomId: { userId: memberUserId, roomId } },
+      data: { role }
+    });
   }
 }
 

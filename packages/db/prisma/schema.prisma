@@ -19,6 +19,8 @@ model User {
   googleId  String?  @unique
   githubId  String?  @unique
   avatarUrl String?
+  name      String?
+  bio       String?
 
   isVerified      Boolean  @default(false)
   verificationToken String?
@@ -29,7 +31,9 @@ model User {
   ownedRooms    Room[] @relation("RoomCreator")
   joinRequests  JoinRequest[]
   scheduledMeetings ScheduledMeeting[] @relation("MeetingCreator")
-  tasks         Task[]
+  tasks         Task[] @relation("TaskCreator")
+  assignedTasks Task[] @relation("TaskAssignee")
+  notifications Notification[] @relation("UserNotifications")
 }
 
 model RefreshToken {
@@ -75,7 +79,10 @@ model Room {
   scheduledMeetings   ScheduledMeeting[]
   tasks               Task[]
 
+  isArchived          Boolean @default(false)
+
   @@index([createdBy])
+  @@index([isArchived])
 }
 
 model RoomMember {
@@ -123,7 +130,7 @@ model CanvasObject {
   crdt      Json // NEW
   time      BigInt?
   actorId   String?
-  version   Int // lastAppliedVersion
+  version   BigInt // lastAppliedVersion
   createdAt DateTime
   updatedAt DateTime
 
@@ -138,9 +145,9 @@ model CanvasSnapshot {
   id        String   @id @default(uuid())
   roomId    String
   type      SnapshotType
-  baseVersion Int?
+  baseVersion BigInt?
   data      Json
-  version   Int
+  version   BigInt
   createdAt DateTime
 
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
@@ -165,12 +172,12 @@ model CanvasActionHistory {
 
   time       BigInt?
   actorId    String?
-  version    Int
+  version    BigInt
 
   
   isUndone          Boolean  @default(false)
   isRedoInvalidated Boolean  @default(false)
-  undoneAtVersion   Int?
+  undoneAtVersion   BigInt?
   referenceActionId String?
 
  
@@ -271,6 +278,8 @@ model ScheduledMeeting {
   attendees   String[] // Array of emails
   
   createdAt   DateTime @default(now())
+  
+  tasks       Task[]
 
   @@index([startTime])
   @@index([roomId])
@@ -280,21 +289,30 @@ model ScheduledMeeting {
 model Task {
   id        String   @id @default(uuid())
   title     String
+  description String?
   status    TaskStatus @default(TODO)
   priority  Priority @default(MEDIUM)
   dueDate   DateTime?
   
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User     @relation("TaskCreator", fields: [userId], references: [id], onDelete: Cascade)
   
+  assigneeId String?
+  assignee   User?   @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
   roomId    String?
-  room      Room?    @relation(fields: [roomId], references: [id])
+  room      Room?    @relation(fields: [roomId], references: [id], onDelete: Cascade)
   
+  meetingId String?
+  meeting   ScheduledMeeting? @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([assigneeId])
   @@index([roomId])
+  @@index([meetingId])
 }
 
 enum TaskStatus {
@@ -338,4 +356,28 @@ enum RoomRole {
 enum RoomVisibility {
   PUBLIC
   PRIVATE
+}
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  
+  type      NotificationType
+  title     String
+  content   String
+  metadata  Json?    // For room IDs, task IDs, etc.
+  
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([isRead])
+}
+
+enum NotificationType {
+  MENTION
+  TASK_ASSIGNED
+  ROOM_INVITE
+  ROOM_ACTIVITY
+  SYSTEM
 }

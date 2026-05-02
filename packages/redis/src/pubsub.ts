@@ -21,6 +21,10 @@ export class RedisPubSub {
     this.serverId = serverId;
   }
 
+  getClient() {
+    return this.pub;
+  }
+
   async connect() {
     const redisUrl = process.env.REDIS_URL;
 
@@ -141,6 +145,18 @@ export class RedisPubSub {
       }
 
       handler(parsed);
+    });
+  }
+
+  pSubscribe(pattern: string, handler: (channel: string, message: string) => void) {
+    if (!this.sub) {
+      throw new Error("RedisPubSub not connected. Call connect() first.");
+    }
+
+    this.sub.psubscribe(pattern);
+    this.sub.on("pmessage", (subscribedPattern, channel, message) => {
+      if (subscribedPattern !== pattern) return;
+      handler(channel, message);
     });
   }
 

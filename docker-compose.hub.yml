@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # --- MACHINE 1: INFRASTRUCTURE HUB ---
+  # Only run these on your 16GB Powerhouse Node
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mypencil-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pencil}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pencil_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-mypencil}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mypencil-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: mypencil-redis
+    restart: always
+    command: redis-server --appendonly yes
+    networks:
+      - mypencil-net
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: mypencil-queue
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER:-pencil}
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS:-pencil_secret}
+    networks:
+      - mypencil-net
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: mypencil-media
+    restart: always
+    command: ["--config", "/etc/livekit.yaml", "--bind", "0.0.0.0"]
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+    volumes:
+      - ./infra/livekit.prod.yaml:/etc/livekit.yaml:ro
+    networks:
+      - mypencil-net
+
+  gateway:
+    image: nginx:alpine
+    container_name: mypencil-gateway
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - mypencil-net
+
+networks:
+  mypencil-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

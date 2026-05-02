@@ -1,101 +1,73 @@
 version: '3.8'
+
 services:
+  # --- THE APPLICATION POD ---
+  # These services run on BOTH Machine 2 and Machine 3 (2GB RAM each)
+  
   http-backend:
-    profiles: ["apps"]
-    build:
-      context: .
-      dockerfile: apps/http-backend/Dockerfile
-    container_name: pencil-http-backend
+    image: us-central1-docker.pkg.dev/${PROJECT_ID}/mypencil/http-backend:latest
+    container_name: mypencil-http
     restart: unless-stopped
-    depends_on:
-      - postgres
-      - redis
-      - rabbitmq
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       PORT: 3001
       NODE_ENV: production
-      DATABASE_URL: postgresql://ritesh:ritesh25@postgres:5432/pencil
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
-      AI_SERVICE_URL: http://ai-service:3004
-      ACCESS_TOKEN_SECRET: dev_access_secret
-      REFRESH_TOKEN_SECRET: dev_refresh_secret
-      LIVEKIT_URL: ws://livekit:7880
-      LIVEKIT_API_KEY: devkey
-      LIVEKIT_API_SECRET: secret
-      INTERNAL_SECRET: internal-dev-secret
-    ports:
-      - "3001:3001"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${HUB_IP}:5432/${POSTGRES_DB}
+      REDIS_URL: redis://${HUB_IP}:6379
+      RABBITMQ_URL: amqp://${RABBIT_USER}:${RABBIT_PASS}@${HUB_IP}:5672
+      LIVEKIT_URL: ws://${HUB_IP}:7880
+      # ... other envs from your .env
+    networks:
+      - mypencil-app-net
 
   ws-backend:
-    profiles: ["apps"]
-    build:
-      context: .
-      dockerfile: apps/ws-backend/Dockerfile
-    container_name: pencil-ws-backend
+    image: us-central1-docker.pkg.dev/${PROJECT_ID}/mypencil/ws-backend:latest
+    container_name: mypencil-ws
     restart: unless-stopped
-    depends_on:
-      - postgres
-      - redis
-      - rabbitmq
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       PORT: 3003
       NODE_ENV: production
-      DATABASE_URL: postgresql://ritesh:ritesh25@postgres:5432/pencil
-      REDIS_URL: redis://redis:6379
-      RABBITMQ_URL: amqp://admin:admin@rabbitmq:5672
-      ACCESS_TOKEN_SECRET: dev_access_secret
-      IMAGE_UPLOAD_BASE_URL: http://ws-backend:3003/upload
-      IMAGE_CDN_BASE_URL: http://ws-backend:3003/upload
-    ports:
-      - "3003:3003"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${HUB_IP}:5432/${POSTGRES_DB}
+      REDIS_URL: redis://${HUB_IP}:6379
+      RABBITMQ_URL: amqp://${RABBIT_USER}:${RABBIT_PASS}@${HUB_IP}:5672
+    networks:
+      - mypencil-app-net
 
   ai-service:
-    profiles: ["apps"]
-    build:
-      context: .
-      dockerfile: apps/ai-service/Dockerfile
-    container_name: pencil-ai-service
+    image: us-central1-docker.pkg.dev/${PROJECT_ID}/mypencil/ai-service:latest
+    container_name: mypencil-ai
     restart: unless-stopped
-    depends_on:
-      - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 400M
     environment:
-      PORT: 3004
-      NODE_ENV: production
-      DATABASE_URL: postgresql://ritesh:ritesh25@postgres:5432/pencil
-    ports:
-      - "3004:3004"
-
-  web:
-    profiles: ["apps"]
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    container_name: pencil-web
-    restart: unless-stopped
-    depends_on:
-      - http-backend
-      - ws-backend
-      - ai-service
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-    ports:
-      - "3000:3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${HUB_IP}:5432/${POSTGRES_DB}
+      RABBITMQ_URL: amqp://${RABBIT_USER}:${RABBIT_PASS}@${HUB_IP}:5672
+    networks:
+      - mypencil-app-net
 
   transcript:
-    profiles: ["apps"]
-    build:
-      context: .
-      dockerfile: apps/transcript/Dockerfile
-    container_name: pencil-transcript
+    image: us-central1-docker.pkg.dev/${PROJECT_ID}/mypencil/transcript:latest
+    container_name: mypencil-transcript
     restart: unless-stopped
-    depends_on:
-      - http-backend
-      - livekit
+    deploy:
+      resources:
+        limits:
+          memory: 300M
     environment:
       HTTP_BACKEND_URL: http://http-backend:3001
-      INTERNAL_SECRET: internal-dev-secret
-      LIVEKIT_URL: ws://livekit:7880
-      LIVEKIT_API_KEY: devkey
-      LIVEKIT_API_SECRET: secret
+      LIVEKIT_URL: ws://${HUB_IP}:7880
+    networks:
+      - mypencil-app-net
+
+networks:
+  mypencil-app-net:
+    driver: bridge

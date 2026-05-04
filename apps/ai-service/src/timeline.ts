@@ -19,7 +19,7 @@ type TimelineBuildOptions = {
 export async function fetchTimelineData(
   roomId: string,
   options?: TimelineBuildOptions,
-) {
+): Promise<any> {
   const includeTranscript = options?.includeTranscript !== false;
   const [canvasEvents, chatMessages, transcriptSegments] = await Promise.all([
     prisma.canvasActionHistory.findMany({

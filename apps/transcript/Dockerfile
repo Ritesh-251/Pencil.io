@@ -9,4 +9,4 @@ COPY apps/transcript /app
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "agent.py"]
+CMD ["python", "agent.py", "start"]

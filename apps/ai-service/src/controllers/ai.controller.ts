@@ -71,7 +71,7 @@ export class AiController {
       }
 
       const context = chunks
-        .map((c, i) => `Chunk ${i + 1}:\n${c.content}`)
+        .map((c: any, i: any) => `Chunk ${i + 1}:\n${c.content}`)
         .join("\n\n");
       const result = await aiService.generateWithFallback({
         model: process.env.GEMINI_CHAT_MODEL!,
@@ -83,7 +83,7 @@ export class AiController {
       return res.status(200).json({
         answer: result.text,
         provider: result.provider,
-        sources: chunks.map((c) => ({
+        sources: chunks.map((c: any) => ({
           type: timelineService.sourceTypeFromContent(c.content),
           content: c.content,
           score: c.score,
@@ -200,7 +200,7 @@ export class AiController {
 
       if (!room) return;
 
-      const emails = room.members.map((m) => m.user.email).filter(Boolean);
+      const emails = room.members.map((m: any) => m.user.email).filter(Boolean);
       if (emails.length === 0) return;
 
       const channel = getChannel();

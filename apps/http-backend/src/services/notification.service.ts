@@ -16,7 +16,7 @@ export class NotificationService {
     title: string;
     content: string;
     metadata?: any;
-  }) {
+  }): Promise<any> {
     const notification = await prisma.notification.create({
       data: {
         userId: params.userId,
@@ -44,7 +44,7 @@ export class NotificationService {
     return notification;
   }
 
-  async getNotifications(userId: string, limit = 20) {
+  async getNotifications(userId: string, limit = 20): Promise<any[]> {
     return prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },

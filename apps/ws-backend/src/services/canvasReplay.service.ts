@@ -20,7 +20,7 @@ export async function replayCanvas({
   fromTime = 0,
   toTime = Number.MAX_SAFE_INTEGER,
   toTimestamp,
-}: ReplayOptions) {
+}: ReplayOptions): Promise<any> {
   const events = await prisma.canvasActionHistory.findMany({
     where: {
       roomId,

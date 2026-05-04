@@ -8,19 +8,12 @@ RUN apk add --no-cache libc6-compat
 WORKDIR /app
 RUN pnpm add -g turbo
 COPY . .
-RUN turbo prune http-backend --docker
-
-FROM base AS installer
-RUN apk add --no-cache libc6-compat
-WORKDIR /app
-
-COPY .gitignore .gitignore
-COPY --from=builder /app/out/json/ .
-COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 RUN pnpm install
-
-COPY --from=builder /app/out/full/ .
-COPY turbo.json turbo.json
+# Clean all build artifacts
+RUN find packages -name "*.tsbuildinfo" -delete
+RUN find packages -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+RUN find apps -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+# Now build
 RUN pnpm turbo run build --filter=http-backend
 
 FROM base AS runner
@@ -29,7 +22,12 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 USER nextjs
 
-COPY --from=installer /app .
+COPY --from=builder /app/apps/http-backend/dist /app/apps/http-backend/dist
+COPY --from=builder /app/apps/http-backend/node_modules /app/apps/http-backend/node_modules
+COPY --from=builder /app/packages /app/packages
+COPY --from=builder /app/node_modules /app/node_modules
+COPY --from=builder /app/package.json /app/package.json
+COPY --from=builder /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
 
 ENV NODE_ENV=production
 EXPOSE 3001

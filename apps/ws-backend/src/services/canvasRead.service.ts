@@ -35,7 +35,7 @@ function readSnapshotState(snapshot: any) {
 export async function buildCanvasLoadPayload(
   roomId: string,
   fromTime?: number,
-) {
+): Promise<any> {
   if (typeof fromTime === "number" && fromTime >= 0) {
     const events = await prisma.canvasActionHistory.findMany({
       where: {

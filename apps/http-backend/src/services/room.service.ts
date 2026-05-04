@@ -55,7 +55,7 @@ export class RoomService {
           requestId: request.id,
           userId,
           userEmail: request.user.email,
-          adminUserIds: room.members.map((member) => member.userId),
+          adminUserIds: room.members.map((member: { userId: string }) => member.userId),
         },
       });
       return {
@@ -66,14 +66,14 @@ export class RoomService {
     }
 
     // Public room: Join immediately
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // 🔥 CONCURRENCY FIX: CONC-1 (Race Condition)
       // Atomic increment with capacity check (100 members max)
       const roomUpdate = await tx.room.update({
         where: { id: roomId, memberCount: { lt: 100 } },
         data: { memberCount: { increment: 1 } },
         select: { id: true }
-      }).catch(err => {
+      }).catch((err: any) => {
         // If the 'where' condition fails (e.g. memberCount >= 100), update returns null or throws.
         // Prisma throws P2025 (Record to update not found) if the where doesn't match.
         if (err.code === 'P2025') throw new ApiError(400, "Room is full");
@@ -88,7 +88,7 @@ export class RoomService {
   }
 
   async leaveRoom(userId: string, roomId: string) {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       const room = await tx.room.findUnique({ where: { id: roomId } });
       if (!room) throw new ApiError(404, "Room not found");
 
@@ -170,7 +170,7 @@ export class RoomService {
       orderBy: { joinedAt: "desc" },
     });
 
-    return memberships.map((m) => ({
+    return memberships.map((m: any) => ({
       roomId: m.room.id,
       name: m.room.name,
       role: m.role,
@@ -225,7 +225,7 @@ export class RoomService {
     if (!request || request.roomId !== roomId)
       throw new ApiError(404, "Request not found");
 
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       // Q-4 FIX: Enforce the same 100-member cap that joinRoom enforces atomically.
       const room = await tx.room.findUnique({
         where: { id: roomId },
@@ -248,7 +248,7 @@ export class RoomService {
         await tx.room.update({
           where: { id: roomId, memberCount: { lt: 100 } },
           data: { memberCount: { increment: 1 } },
-        }).catch(err => {
+        }).catch((err: any) => {
           if (err.code === 'P2025') throw new ApiError(400, "Room is full");
           throw err;
         });
@@ -309,7 +309,7 @@ export class RoomService {
 
     if (!room) throw new ApiError(404, "Room not found");
 
-    const isMember = room.members.some((m) => m.userId === userId);
+    const isMember = room.members.some((m: any) => m.userId === userId);
     if (room.visibility === "PRIVATE" && !isMember) {
       throw new ApiError(403, "Access denied to private room");
     }
@@ -325,7 +325,7 @@ export class RoomService {
     });
     if (!room) throw new ApiError(404, "Room not found");
 
-    const isMember = room.members.some(m => m.userId === userId);
+    const isMember = room.members.some((m: any) => m.userId === userId);
     if (room.visibility === "PRIVATE" && !isMember) {
       throw new ApiError(403, "Access denied");
     }

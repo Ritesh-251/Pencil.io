@@ -24,6 +24,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@repo/auth": "workspace:*",
+    "@repo/common": "workspace:*",
+    "@repo/db": "workspace:*",
+    "@repo/messaging": "workspace:*",
     "@repo/redis": "workspace:*",
     "@repo/storage": "workspace:*",
     "@repo/validation": "workspace:*",

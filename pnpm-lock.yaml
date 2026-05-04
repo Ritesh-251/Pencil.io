@@ -75,6 +75,18 @@ importers:
 
   apps/http-backend:
     dependencies:
+      '@repo/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@repo/common':
+        specifier: workspace:*
+        version: link:../../packages/common
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@repo/messaging':
+        specifier: workspace:*
+        version: link:../../packages/messaging
       '@repo/redis':
         specifier: workspace:*
         version: link:../../packages/redis
@@ -362,9 +374,18 @@ importers:
       '@prisma/client-runtime-utils':
         specifier: ^7.4.2
         version: 7.4.2
+      '@prisma/config':
+        specifier: ^7.4.2
+        version: 7.4.2(magicast@0.5.2)
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.3.1
       pg:
         specifier: ^8.19.0
         version: 8.19.0
+      prisma:
+        specifier: ^7.4.2
+        version: 7.4.2(@types/react@19.2.2)(magicast@0.5.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
     devDependencies:
       '@repo/typescript-config':
         specifier: workspace:*
@@ -375,9 +396,6 @@ importers:
       '@types/pg':
         specifier: ^8.18.0
         version: 8.18.0
-      prisma:
-        specifier: ^7.4.2
-        version: 7.4.2(@types/react@19.2.2)(magicast@0.5.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)
       typescript:
         specifier: latest
         version: 5.9.3
@@ -461,6 +479,10 @@ importers:
       minio:
         specifier: ^8.0.7
         version: 8.0.7
+    devDependencies:
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
 
   packages/typescript-config: {}
 

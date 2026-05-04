@@ -4,9 +4,9 @@ services:
     container_name: pencil-postgres
     restart: always
     environment:
-      POSTGRES_USER: ritesh
-      POSTGRES_PASSWORD: ritesh25
-      POSTGRES_DB: pencil
+      POSTGRES_USER: pencil
+      POSTGRES_PASSWORD: pencil_secret_123
+      POSTGRES_DB: mypencil
     ports:
       - "5432:5432"
     volumes:

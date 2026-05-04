@@ -3,7 +3,7 @@ import { WebSocketServer } from "ws";
 import express from "express";
 import cors from "cors";
 import { SocketManager } from "./socketManager";
-import { createStorageService } from "@repo/storage";
+import { storageService } from "@repo/storage";
 
 export const socketManager = new SocketManager();
 import {
@@ -22,6 +22,7 @@ import { getUserIdFromAuthHeader } from "./utils/auth.util";
 import {
   normalizeHeaderValue,
   resolveCorsOrigin,
+  withCorsHeaders,
 } from "./utils/http.util";
 import { createRedisRateLimiter } from "./middleware/rateLimit.middleware";
 
@@ -168,7 +169,7 @@ export async function startSocketServer() {
   });
 
   // UPLOAD PUT (Binary)
-  app.put("/upload/*", createRedisRateLimiter(120, "upload-put"), async (req, res) => {
+  app.put(/^\/upload\/(.*)/, createRedisRateLimiter(120, "upload-put"), async (req, res) => {
     const urlPath = req.path;
     const uploadPath = sanitizeUploadPath(urlPath);
     if (!uploadPath) {
@@ -238,7 +239,7 @@ export async function startSocketServer() {
   });
 
   // UPLOAD GET (SECURED)
-  app.get("/upload/*", async (req, res) => {
+  app.get(/^\/upload\/(.*)/, async (req, res) => {
     const urlPath = req.path;
     const uploadPath = sanitizeUploadPath(urlPath);
     if (!uploadPath) {

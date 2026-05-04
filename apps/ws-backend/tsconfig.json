@@ -6,5 +6,14 @@
     "skipLibCheck": true
   },
   "include": ["src"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../packages/auth" },
+    { "path": "../../packages/common" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/messaging" },
+    { "path": "../../packages/redis" },
+    { "path": "../../packages/storage" },
+    { "path": "../../packages/validation" }
+  ]
 }

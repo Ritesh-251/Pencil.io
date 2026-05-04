@@ -49,14 +49,14 @@ async function bootstrap() {
     startCompactionScheduler();
     startQueueMonitor();
 
-    pubsub.subscribe((event) => {
+    pubsub.subscribe((event: any) => {
       roomManager.broadCast(event.roomId, {
         type: event.type,
         payload: event.payload,
       });
     });
 
-    pubsub.pSubscribe("notifications:*", (channel, message) => {
+    pubsub.pSubscribe("notifications:*", (channel: string, message: string) => {
       const userId = channel.split(":")[1];
       if (!userId) return;
 
@@ -97,7 +97,7 @@ async function bootstrap() {
 
     process.on("SIGTERM", () => void shutdown("SIGTERM"));
     process.on("SIGINT", () => void shutdown("SIGINT"));
-  } catch (err) {
+  } catch (err: any) {
     logger.error(
       { err, stage: "consume", type: "BOOT" },
       "Server failed to start",

@@ -50,7 +50,7 @@ export class TimelineService {
       embeddings.push(vector);
     }
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: any) => {
       await tx.sessionChunk.deleteMany({ where: { roomId } });
 
       for (const [index, chunk] of chunks.entries()) {

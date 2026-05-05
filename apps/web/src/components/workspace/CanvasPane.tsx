@@ -1365,156 +1365,145 @@ export const CanvasPane = () => {
         dprNow * view.offsetX,
         dprNow * view.offsetY,
       );
+
       drawableObjects.forEach((obj: any) => drawObject(ctx, obj));
-    };
-    drawAllRef.current = drawAll;
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssWidth, cssHeight);
+      if (textDraft) {
+        drawObject(ctx, {
+          type: "text",
+          x: textDraft.x,
+          y: textDraft.y,
+          text: textDraft.value,
+          color: strokeColor,
+          fontSize: textDraft.fontSize,
+          fontFamily: textDraft.fontFamily || DEFAULT_FONT_FAMILY,
+        });
 
-    ctx.setTransform(
-      dpr * view.scale,
-      0,
-      0,
-      dpr * view.scale,
-      dpr * view.offsetX,
-      dpr * view.offsetY,
-    );
+        if (caretVisible) {
+          const lines = (textDraft.value || "").split(/\n/g);
+          const lastLine = lines[lines.length - 1] || "";
+          const fontSize = textDraft.fontSize;
+          const lineHeight = Math.round(fontSize * 1.24);
 
-    drawableObjects.forEach((obj: any) => drawObject(ctx, obj));
-
-    if (textDraft) {
-      drawObject(ctx, {
-        type: "text",
-        x: textDraft.x,
-        y: textDraft.y,
-        text: textDraft.value,
-        color: strokeColor,
-        fontSize: textDraft.fontSize,
-        fontFamily: textDraft.fontFamily || DEFAULT_FONT_FAMILY,
-      });
-
-      if (caretVisible) {
-        const lines = (textDraft.value || "").split(/\n/g);
-        const lastLine = lines[lines.length - 1] || "";
-        const fontSize = textDraft.fontSize;
-        const lineHeight = Math.round(fontSize * 1.24);
-
-        ctx.save();
-        ctx.fillStyle = strokeColor;
-        const caretFontFamily = textDraft.fontFamily || DEFAULT_FONT_FAMILY;
-        ctx.font = `${fontSize}px ${caretFontFamily}`;
-        const caretX = textDraft.x + ctx.measureText(lastLine).width + 1;
-        const caretY = textDraft.y + (lines.length - 1) * lineHeight;
-        ctx.fillRect(
-          caretX,
-          caretY,
-          Math.max(1, Math.round(fontSize * 0.08)),
-          Math.max(12, Math.round(fontSize * 1.08)),
-        );
-        ctx.restore();
-      }
-    }
-
-    // Smart selection overlay: 1 object = individual handles, 2+ = union bounding box
-    const selIds = selectedObjectIdsRef.current;
-    if (selIds.length === 1) {
-      const selected = objects.get(selIds[0]!);
-      if (selected) drawSelectionOverlay(ctx, selected);
-    } else if (selIds.length > 1) {
-      // Compute union bounding box
-      let uL = Infinity,
-        uT = Infinity,
-        uR = -Infinity,
-        uB = -Infinity;
-      selIds.forEach((id) => {
-        const obj = objects.get(id);
-        if (!obj || obj.deleted) return;
-        const b = getObjectBounds(obj);
-        if (!b) return;
-        uL = Math.min(uL, b.left);
-        uT = Math.min(uT, b.top);
-        uR = Math.max(uR, b.right);
-        uB = Math.max(uB, b.bottom);
-      });
-      if (Number.isFinite(uL)) {
-        const scale = view.scale;
-        const line = Math.max(1, 1.25 / Math.max(1, scale));
-        ctx.save();
-        ctx.strokeStyle = "#2563eb";
-        ctx.fillStyle = "#ffffff";
-        ctx.lineWidth = line;
-        ctx.setLineDash([6 / Math.max(1, scale), 4 / Math.max(1, scale)]);
-        ctx.strokeRect(uL, uT, uR - uL, uB - uT);
-        ctx.setLineDash([]);
-        // 8 handles on the union box
-        const cx = (uL + uR) / 2,
-          cy = (uT + uB) / 2;
-        const handleSize = HANDLE_SIZE / Math.max(1, scale);
-        const drawH = (hx: number, hy: number) => {
-          ctx.beginPath();
-          ctx.rect(
-            hx - handleSize / 2,
-            hy - handleSize / 2,
-            handleSize,
-            handleSize,
+          ctx.save();
+          ctx.fillStyle = strokeColor;
+          const caretFontFamily = textDraft.fontFamily || DEFAULT_FONT_FAMILY;
+          ctx.font = `${fontSize}px ${caretFontFamily}`;
+          const caretX = textDraft.x + ctx.measureText(lastLine).width + 1;
+          const caretY = textDraft.y + (lines.length - 1) * lineHeight;
+          ctx.fillRect(
+            caretX,
+            caretY,
+            Math.max(1, Math.round(fontSize * 0.08)),
+            Math.max(12, Math.round(fontSize * 1.08)),
           );
-          ctx.fill();
-          ctx.stroke();
-        };
-        drawH(uL, uT);
-        drawH(cx, uT);
-        drawH(uR, uT);
-        drawH(uR, cy);
-        drawH(uR, uB);
-        drawH(cx, uB);
-        drawH(uL, uB);
-        drawH(uL, cy);
-        // Dashed outlines for individual objects within the group
-        ctx.setLineDash([4 / Math.max(1, scale), 3 / Math.max(1, scale)]);
-        ctx.strokeStyle = "rgba(37, 99, 235, 0.3)";
-        ctx.lineWidth = Math.max(0.5, 0.75 / Math.max(1, scale));
+          ctx.restore();
+        }
+      }
+
+      // Smart selection overlay: 1 object = individual handles, 2+ = union bounding box
+      const selIds = selectedObjectIdsRef.current;
+      if (selIds.length === 1) {
+        const selected = objects.get(selIds[0]!);
+        if (selected) drawSelectionOverlay(ctx, selected);
+      } else if (selIds.length > 1) {
+        // Compute union bounding box
+        let uL = Infinity,
+          uT = Infinity,
+          uR = -Infinity,
+          uB = -Infinity;
         selIds.forEach((id) => {
           const obj = objects.get(id);
           if (!obj || obj.deleted) return;
           const b = getObjectBounds(obj);
-          if (b)
-            ctx.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
+          if (!b) return;
+          uL = Math.min(uL, b.left);
+          uT = Math.min(uT, b.top);
+          uR = Math.max(uR, b.right);
+          uB = Math.max(uB, b.bottom);
         });
-        ctx.setLineDash([]);
+        if (Number.isFinite(uL)) {
+          const scale = view.scale;
+          const line = Math.max(1, 1.25 / Math.max(1, scale));
+          ctx.save();
+          ctx.strokeStyle = "#2563eb";
+          ctx.fillStyle = "#ffffff";
+          ctx.lineWidth = line;
+          ctx.setLineDash([6 / Math.max(1, scale), 4 / Math.max(1, scale)]);
+          ctx.strokeRect(uL, uT, uR - uL, uB - uT);
+          ctx.setLineDash([]);
+          // 8 handles on the union box
+          const cx = (uL + uR) / 2,
+            cy = (uT + uB) / 2;
+          const handleSize = HANDLE_SIZE / Math.max(1, scale);
+          const drawH = (hx: number, hy: number) => {
+            ctx.beginPath();
+            ctx.rect(
+              hx - handleSize / 2,
+              hy - handleSize / 2,
+              handleSize,
+              handleSize,
+            );
+            ctx.fill();
+            ctx.stroke();
+          };
+          drawH(uL, uT);
+          drawH(cx, uT);
+          drawH(uR, uT);
+          drawH(uR, cy);
+          drawH(uR, uB);
+          drawH(cx, uB);
+          drawH(uL, uB);
+          drawH(uL, cy);
+          // Dashed outlines for individual objects within the group
+          ctx.setLineDash([4 / Math.max(1, scale), 3 / Math.max(1, scale)]);
+          ctx.strokeStyle = "rgba(37, 99, 235, 0.3)";
+          ctx.lineWidth = Math.max(0.5, 0.75 / Math.max(1, scale));
+          selIds.forEach((id) => {
+            const obj = objects.get(id);
+            if (!obj || obj.deleted) return;
+            const b = getObjectBounds(obj);
+            if (b)
+              ctx.strokeRect(b.left, b.top, b.right - b.left, b.bottom - b.top);
+          });
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
+      }
+
+      if (selectionBox) {
+        const left = Math.min(selectionBox.startX, selectionBox.endX);
+        const top = Math.min(selectionBox.startY, selectionBox.endY);
+        const width = Math.abs(selectionBox.endX - selectionBox.startX);
+        const height = Math.abs(selectionBox.endY - selectionBox.startY);
+
+        ctx.save();
+        ctx.strokeStyle = "#2563eb";
+        ctx.fillStyle = "rgba(37, 99, 235, 0.12)";
+        ctx.lineWidth = Math.max(1, 1.1 / Math.max(1, view.scale));
+        ctx.setLineDash([
+          6 / Math.max(1, view.scale),
+          4 / Math.max(1, view.scale),
+        ]);
+        ctx.fillRect(left, top, width, height);
+        ctx.strokeRect(left, top, width, height);
         ctx.restore();
       }
-    }
 
-    if (selectionBox) {
-      const left = Math.min(selectionBox.startX, selectionBox.endX);
-      const top = Math.min(selectionBox.startY, selectionBox.endY);
-      const width = Math.abs(selectionBox.endX - selectionBox.startX);
-      const height = Math.abs(selectionBox.endY - selectionBox.startY);
+      // Performance Optimization: Render active stroke from ref for 60fps feedback
+      if (activeStrokeRef.current && isDrawing.current) {
+        drawObject(ctx, {
+          type: "stroke",
+          points: activeStrokeRef.current.points,
+          color: activeStrokeRef.current.color,
+          width: activeStrokeRef.current.width,
+          strokeStyle: "smooth",
+        });
+      }
+    };
 
-      ctx.save();
-      ctx.strokeStyle = "#2563eb";
-      ctx.fillStyle = "rgba(37, 99, 235, 0.12)";
-      ctx.lineWidth = Math.max(1, 1.1 / Math.max(1, view.scale));
-      ctx.setLineDash([
-        6 / Math.max(1, view.scale),
-        4 / Math.max(1, view.scale),
-      ]);
-      ctx.fillRect(left, top, width, height);
-      ctx.strokeRect(left, top, width, height);
-      ctx.restore();
-    }
-
-    // Performance Optimization: Render active stroke from ref for 60fps feedback
-    if (activeStrokeRef.current && isDrawing.current) {
-      drawObject(ctx, {
-        type: "stroke",
-        points: activeStrokeRef.current.points,
-        color: activeStrokeRef.current.color,
-        width: activeStrokeRef.current.width,
-        strokeStyle: "smooth",
-      });
-    }
+    drawAllRef.current = drawAll;
+    drawAll();
   }, [
     caretVisible,
     drawObject,

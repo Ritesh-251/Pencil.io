@@ -327,12 +327,32 @@ export default function RoomPage({
       }
       setStatus("disconnected");
       stopSyncing();
+
+      // Silent automatic reconnection
+      if (ws.getRoomId() === roomId) {
+        console.log("[Room] Scheduling automatic reconnection in 2s...");
+        setTimeout(() => {
+          if (ws.getRoomId() === roomId && !ws.isConnected()) {
+            void connectSocket();
+          }
+        }, 2000);
+      }
     });
 
     const offWsError = ws.on("ws:error", (err) => {
       console.error("[Room] WebSocket error", err);
       setStatus("disconnected");
       stopSyncing();
+
+      // Silent automatic reconnection on error
+      if (ws.getRoomId() === roomId) {
+        console.log("[Room] Scheduling automatic reconnection in 2s...");
+        setTimeout(() => {
+          if (ws.getRoomId() === roomId && !ws.isConnected()) {
+            void connectSocket();
+          }
+        }, 2000);
+      }
     });
 
     void connectSocket();

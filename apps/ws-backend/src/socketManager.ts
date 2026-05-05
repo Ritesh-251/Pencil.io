@@ -51,7 +51,7 @@ export class SocketManager {
       }
       ws.isAlive = false;
       ws.ping();
-    }, 30000);
+    }, 15000);
 
     ws.on("pong", () => {
       ws.isAlive = true;

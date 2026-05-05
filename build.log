@@ -1,0 +1,87 @@
+#0 building with "colima" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.15kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 1.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 130B done
+#3 DONE 0.0s
+
+#4 [base 1/2] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 2.79MB 1.7s done
+#5 DONE 1.7s
+
+#6 [builder 9/9] RUN pnpm turbo run build --filter=http-backend
+#6 CACHED
+
+#7 [builder 1/9] RUN apk add --no-cache libc6-compat
+#7 CACHED
+
+#8 [builder 8/9] RUN find apps -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+#8 CACHED
+
+#9 [runner 6/9] COPY --from=builder /app/packages /app/packages
+#9 CACHED
+
+#10 [builder 7/9] RUN find packages -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+#10 CACHED
+
+#11 [runner 8/9] COPY --from=builder /app/package.json /app/package.json
+#11 CACHED
+
+#12 [base 2/2] RUN corepack enable
+#12 CACHED
+
+#13 [runner 2/9] RUN addgroup --system --gid 1001 nodejs
+#13 CACHED
+
+#14 [builder 4/9] COPY . .
+#14 CACHED
+
+#15 [builder 2/9] WORKDIR /app
+#15 CACHED
+
+#16 [builder 3/9] RUN pnpm add -g turbo
+#16 CACHED
+
+#17 [runner 1/9] WORKDIR /app
+#17 CACHED
+
+#18 [builder 6/9] RUN find packages -name "*.tsbuildinfo" -delete
+#18 CACHED
+
+#19 [builder 5/9] RUN pnpm install
+#19 CACHED
+
+#20 [runner 4/9] COPY --from=builder /app/apps/http-backend/dist /app/apps/http-backend/dist
+#20 CACHED
+
+#21 [runner 5/9] COPY --from=builder /app/apps/http-backend/node_modules /app/apps/http-backend/node_modules
+#21 CACHED
+
+#22 [runner 3/9] RUN adduser --system --uid 1001 nextjs
+#22 CACHED
+
+#23 [runner 7/9] COPY --from=builder /app/node_modules /app/node_modules
+#23 CACHED
+
+#24 [runner 9/9] COPY --from=builder /app/pnpm-workspace.yaml /app/pnpm-workspace.yaml
+#24 CACHED
+
+#25 exporting to image
+#25 exporting layers done
+#25 exporting manifest sha256:cb905b97bc02a5a67b9ab9c1c9643638fa9ca0f593ca97f74bd0a87253ece89c done
+#25 exporting config sha256:cc15f6888e8676203f6af66fd36b9234ebdf3ebd42e21a9c7e005be5b7053140 done
+#25 exporting attestation manifest sha256:0250f75eebb194847c1be98ac62e08d4819883992c6c7d07e7c54b72ca921da4 0.0s done
+#25 exporting manifest list sha256:6d11b4f173abbce86a8b45d8599ef0cb6386c76f65c293b656489999cf6eb2dd done
+#25 naming to gcr.io/project-9a30612f-91c5-4636-ac1/http-backend:latest done
+#25 unpacking to gcr.io/project-9a30612f-91c5-4636-ac1/http-backend:latest done
+#25 DONE 0.1s

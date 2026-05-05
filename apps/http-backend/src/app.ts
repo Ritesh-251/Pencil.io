@@ -42,10 +42,16 @@ app.use(
   cors({
     origin(origin, callback) {
       if (!origin) return callback(null, true);
-      const normalized = origin.replace(/\/$/, "");
-      if (allowedOrigins.includes(normalized)) {
+      const normalized = origin.replace(/\/$/, "").toLowerCase();
+      const isAllowed = allowedOrigins.some(
+        (o) => o.replace(/\/$/, "").toLowerCase() === normalized
+      );
+
+      if (isAllowed) {
         return callback(null, true);
       }
+
+      console.error(`[CORS] Denied origin: "${origin}". Allowed:`, allowedOrigins);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,

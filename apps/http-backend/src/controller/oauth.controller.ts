@@ -18,15 +18,17 @@ export const oauthCallbackHandler = async (req: Request, res: Response) => {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
+      domain: process.env.COOKIE_DOMAIN || undefined,
     });
 
     res.cookie("has_session", "true", {
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      sameSite: (process.env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
       maxAge: 30 * 24 * 60 * 60 * 1000,
       httpOnly: false,
+      domain: process.env.COOKIE_DOMAIN || undefined,
     });
 
     // Redirect to a frontend route that will capture the access token

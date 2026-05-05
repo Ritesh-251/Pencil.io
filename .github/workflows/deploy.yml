@@ -70,6 +70,9 @@ jobs:
           host: ${{ matrix.vm_ip }}
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          proxy_host: 34.131.66.105
+          proxy_username: ${{ secrets.VM_USER }}
+          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/mypencil/app
             docker compose pull

@@ -60,20 +60,16 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        vm_ip: [10.190.0.3, 10.190.0.4]
     steps:
-      - name: Deploy to VM via SSH
+      - name: Deploy to Cluster via Hub
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ matrix.vm_ip }}
+          host: 34.131.66.105
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          proxy_host: 34.131.66.105
-          proxy_username: ${{ secrets.VM_USER }}
-          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/mypencil/app
-            docker compose pull
-            docker compose up -d
+            # Update Node 1
+            ssh -o StrictHostKeyChecking=no 10.190.0.3 "cd ~/mypencil/app && docker compose pull && docker compose up -d"
+            
+            # Update Node 2
+            ssh -o StrictHostKeyChecking=no 10.190.0.4 "cd ~/mypencil/app && docker compose pull && docker compose up -d"

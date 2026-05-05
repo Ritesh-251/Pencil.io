@@ -693,8 +693,28 @@ function ReactionTray({
   dark?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -711,7 +731,8 @@ function ReactionTray({
               type="button"
               onClick={() => {
                 onReact(emoji);
-                setOpen(false);
+                // Keep drawer open so user can click multiple emojis to react,
+                // closes when clicking outside of the ReactionTray trigger.
               }}
               className="flex h-9 w-9 items-center justify-center rounded-xl text-[1.35rem] transition-transform hover:scale-125 hover:bg-[rgba(13,91,215,.08)] active:scale-95"
             >

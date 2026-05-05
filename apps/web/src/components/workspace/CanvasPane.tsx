@@ -12,10 +12,10 @@ import {
 } from "react";
 import { useParams } from "next/navigation";
 import {
-  MousePointer,
-  Pencil,
+  MousePointer2,
+  Pen,
   Eraser,
-  ArrowRight,
+  ArrowUpRight,
   Square,
   Circle,
   Type,
@@ -2529,18 +2529,46 @@ export const CanvasPane = () => {
           />
         )}
 
-        <div className="glass absolute left-4 top-4 z-10 flex w-[220px] flex-col gap-2 rounded-2xl p-3">
-          <div className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
-            Tools
+        <div className="glass absolute left-4 top-4 z-10 flex w-[220px] flex-col gap-2 rounded-2xl p-3.5">
+          <div className="flex items-center justify-between">
+            <div className="text-[0.72rem] font-bold uppercase tracking-[0.08em] text-[var(--ink-soft)]">
+              Tools
+            </div>
+            <div className="group relative flex items-center">
+              <button
+                type="button"
+                className="flex h-5 w-5 items-center justify-center rounded-full border border-[rgba(26,26,26,.12)] bg-[rgba(255,250,241,.8)] text-[var(--ink-soft)] transition hover:scale-105 hover:bg-[rgba(13,91,215,.12)] hover:text-[var(--brand-strong)] shadow-sm"
+                title="Keyboard shortcuts"
+              >
+                <HelpCircle className="w-3.5 h-3.5 stroke-[1.8]" />
+              </button>
+              <div className="pointer-events-none absolute left-6 top-0 z-50 hidden w-[200px] rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.97)] p-2 text-[0.62rem] leading-[1.5] text-[var(--ink-soft)] shadow-lg group-hover:pointer-events-auto group-hover:block">
+                <strong>Shortcuts</strong>
+                <br />
+                Wheel: pan canvas
+                <br />
+                Cmd/Ctrl + wheel: zoom
+                <br />
+                Drag empty area: multi-select
+                <br />
+                Delete/Backspace: remove selected
+                <br />
+                Enter: new line in text
+                <br />
+                Shift+Enter: commit text
+                <br />
+                Cmd+Z: undo &middot; Cmd+Shift+Z: redo
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-3 gap-1.5">
             {TOOLS.map((tool) => {
               const Icon = {
-                select: MousePointer,
-                draw: Pencil,
+                select: MousePointer2,
+                draw: Pen,
                 erase: Eraser,
-                arrow: ArrowRight,
+                arrow: ArrowUpRight,
                 rectangle: Square,
                 ellipse: Circle,
                 text: Type,
@@ -2552,7 +2580,7 @@ export const CanvasPane = () => {
                 <button
                   key={tool.id}
                   type="button"
-                  className={`flex items-center justify-center rounded-[10px] border p-2 transition duration-150 ${activeTool === tool.id ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_18px_rgba(13,91,215,.24)]" : "border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:-translate-y-0.5 hover:bg-[rgba(26,26,26,.05)]"}`}
+                  className={`flex h-10 w-full items-center justify-center rounded-xl border p-1 transition duration-150 ${activeTool === tool.id ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_12px_rgba(13,91,215,.18)]" : "border-[rgba(26,26,26,.12)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:-translate-y-0.5 hover:bg-[rgba(26,26,26,.05)]"}`}
                   onClick={() => {
                     const nextTool = tool.id as CanvasTool;
                     setActiveTool(nextTool);
@@ -2563,37 +2591,10 @@ export const CanvasPane = () => {
                   }}
                   title={tool.label}
                 >
-                  {Icon ? <Icon className="h-4.5 w-4.5 stroke-[2.2]" /> : tool.symbol}
+                  {Icon ? <Icon className="h-4 w-4 stroke-[1.8]" /> : tool.symbol}
                 </button>
               );
             })}
-          </div>
-
-          <div className="group relative flex items-center">
-            <button
-              type="button"
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(26,26,26,.18)] bg-[rgba(255,250,241,.8)] text-[var(--ink-soft)] transition hover:scale-105 hover:bg-[rgba(13,91,215,.12)] hover:text-[var(--brand-strong)] shadow-sm"
-              title="Keyboard shortcuts"
-            >
-              <HelpCircle className="w-4 h-4 stroke-[2.2]" />
-            </button>
-            <div className="pointer-events-none absolute left-8 top-0 z-50 hidden w-[200px] rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.97)] p-2 text-[0.62rem] leading-[1.5] text-[var(--ink-soft)] shadow-lg group-hover:pointer-events-auto group-hover:block">
-              <strong>Shortcuts</strong>
-              <br />
-              Wheel: pan canvas
-              <br />
-              Cmd/Ctrl + wheel: zoom
-              <br />
-              Drag empty area: multi-select
-              <br />
-              Delete/Backspace: remove selected
-              <br />
-              Enter: new line in text
-              <br />
-              Shift+Enter: commit text
-              <br />
-              Cmd+Z: undo &middot; Cmd+Shift+Z: redo
-            </div>
           </div>
 
           <div className="mt-1 grid gap-1.5">

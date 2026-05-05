@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 44">
+  <!-- Icon tile 44×44 -->
+  <rect width="44" height="44" rx="10" fill="#fffaf1" stroke="rgba(26,26,26,0.16)" stroke-width="1"/>
+  <!-- P stem -->
+  <rect x="11" y="8"  width="7"  height="29" rx="2" fill="#1a1a1a"/>
+  <!-- P top bar -->
+  <rect x="11" y="8"  width="19" height="7"  rx="2" fill="#1a1a1a"/>
+  <!-- P belly corner -->
+  <rect x="23" y="8"  width="7"  height="7"  fill="#1a1a1a"/>
+  <!-- P belly curve -->
+  <rect x="25" y="13" width="6"  height="14" rx="3" fill="#1a1a1a"/>
+  <!-- P belly bottom -->
+  <rect x="11" y="23" width="20" height="7"  rx="2" fill="#1a1a1a"/>
+  <!-- Orange nib -->
+  <polygon points="32,33 39,28 39,38" fill="#e36a1f"/>
+  <!-- Orange curl -->
+  <path d="M39,33 Q42,30 44,33" fill="none" stroke="#e36a1f" stroke-width="1.8" stroke-linecap="round"/>
+
+  <!-- Wordmark — Geist Sans, tracking tight like your navbar -->
+  <text font-family="'Geist Sans','Avenir Next','Trebuchet MS',sans-serif"
+        font-size="20" font-weight="700" fill="#1a1a1a" letter-spacing="-0.8">
+    <tspan x="54" y="29">my</tspan>
+  </text>
+  <text font-family="'Geist Sans','Avenir Next','Trebuchet MS',sans-serif"
+        font-size="20" font-weight="700" fill="#1a1a1a" letter-spacing="-0.8">
+    <tspan x="84" y="29">pencil</tspan>
+  </text>
+  <text font-family="'Geist Sans','Avenir Next','Trebuchet MS',sans-serif"
+        font-size="20" font-weight="400" fill="#57504a" letter-spacing="-0.4">
+    <tspan x="196" y="29">.tech</tspan>
+  </text>
+
+  <!-- Orange underline on "pencil" -->
+  <rect x="84" y="33" width="110" height="2" rx="1" fill="#e36a1f" opacity="0.5"/>
+</svg>

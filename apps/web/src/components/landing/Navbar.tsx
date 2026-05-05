@@ -2,12 +2,13 @@ import Link from "next/link";
 
 export const Navbar = () => (
   <nav className="glass sticky top-4 z-20 mx-auto mt-4 flex w-[min(1200px,calc(100%-2rem))] items-center justify-between rounded-2xl px-4 py-3 md:px-5">
-    <div className="flex items-center gap-2.5 font-bold">
-      <div className="grid h-9 w-9 place-items-center rounded-[10px] border border-[rgba(26,26,26,0.2)] bg-[rgba(13,91,215,0.12)]">
-        ✏️
-      </div>
-      <div className="text-[1.02rem] tracking-[-0.02em]">MyPencil</div>
-    </div>
+    <Link href="/" className="flex items-center transition-opacity hover:opacity-90">
+      <img
+        src="/logo-wordmark-light.svg"
+        alt="MyPencil Logo"
+        className="h-8 w-auto object-contain"
+      />
+    </Link>
     <div className="hidden items-center gap-4 md:flex">
       <a
         href="#features"

@@ -6,6 +6,8 @@ import { useTimerStore } from "@/store/timer.store";
 import { useNotificationStore } from "@/store/notification.store";
 import { Bell, Play, Pause, RotateCcw, Clock, Target } from "lucide-react";
 
+import Link from "next/link";
+
 export type DashboardTab = "ROOMS" | "INBOX" | "PLANNER" | "PROFILE";
 
 interface SidebarProps {
@@ -55,13 +57,17 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
 
   return (
     <aside className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] flex flex-col gap-3 rounded-[24px] p-4 shadow-sm">
-      <div>
+      <div className="flex flex-col gap-1.5">
         <p className="m-0 text-[0.72rem] uppercase tracking-[0.12em] text-[var(--ink-soft)]">
           Workspace
         </p>
-        <div className="text-[1.02rem] tracking-[-0.05em] text-[var(--ink)]">
-          MyPencil
-        </div>
+        <Link href="/" className="flex items-center transition-opacity hover:opacity-90">
+          <img
+            src="/logo-wordmark-light.svg"
+            alt="MyPencil"
+            className="h-7 w-auto object-contain"
+          />
+        </Link>
       </div>
 
       <nav className="grid gap-1">

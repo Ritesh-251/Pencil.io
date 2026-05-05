@@ -15,6 +15,9 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: "MyPencil",
   description: "The cinematic collaborative workspace for teams. mypencil.tech",
+  icons: {
+    icon: "/logo-icon-light.svg",
+  },
 };
 
 export default function RootLayout({

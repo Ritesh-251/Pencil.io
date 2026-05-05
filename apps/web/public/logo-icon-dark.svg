@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="g" cx="25%" cy="25%" r="80%">
+      <stop offset="0%" stop-color="#0d5bd7" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="#e36a1f" stop-opacity="0.15"/>
+    </radialGradient>
+    <clipPath id="c"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#1a1a1a"/>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <rect x="120" y="104" width="62" height="304" rx="14" fill="#fffaf1"/>
+  <rect x="120" y="104" width="184" height="62" rx="14" fill="#fffaf1"/>
+  <rect x="244" y="104" width="60" height="62" fill="#fffaf1"/>
+  <rect x="272" y="136" width="58" height="134" rx="29" fill="#fffaf1"/>
+  <rect x="120" y="234" width="210" height="62" rx="14" fill="#fffaf1"/>
+  <polygon points="340,344 396,308 396,380" fill="#e36a1f"/>
+  <path d="M396,344 Q436,316 466,350 Q490,376 512,358" fill="none" stroke="#e36a1f" stroke-width="22" stroke-linecap="round" clip-path="url(#c)"/>
+</svg>

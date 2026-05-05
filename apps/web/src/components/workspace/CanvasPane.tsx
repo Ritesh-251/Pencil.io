@@ -2597,103 +2597,173 @@ export const CanvasPane = () => {
             })}
           </div>
 
-          <div className="mt-1 grid gap-1.5">
+          <div className="mt-1 flex flex-col gap-2.5">
             {/* Stroke Color */}
-            <div className="flex flex-col gap-1.5 border-r border-slate-200/60 pr-3 mr-1">
+            <div className="flex flex-col gap-1.5">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 Stroke
               </span>
-              <input
-                type="color"
-                value={strokeColor}
-                onChange={(e) => setStrokeColor(e.target.value)}
-                className="h-8 w-8 cursor-pointer overflow-hidden rounded-lg border-2 border-slate-100 shadow-sm transition-transform hover:scale-110"
-                title="Stroke Color"
-              />
-            </div>
-
-            {/* Fill Color */}
-            <div className="flex flex-col gap-1.5 border-r border-slate-200/60 pr-3 mr-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Background
-              </span>
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={fillColor}
-                  onChange={(e) => setFillColor(e.target.value)}
-                  className={`h-8 w-8 cursor-pointer overflow-hidden rounded-lg border-2 border-slate-100 shadow-sm transition-transform hover:scale-110 ${!fillEnabled ? "opacity-30 grayscale" : ""}`}
-                  title="Fill Color"
-                />
-                <button
-                  onClick={() => setFillEnabled((prev) => !prev)}
-                  className={`flex h-8 items-center justify-center rounded-lg border-2 px-2 text-[10px] font-bold transition-all ${
-                    fillEnabled
-                      ? "border-blue-500 bg-blue-50 text-blue-600 shadow-inner"
-                      : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                  }`}
-                  title="Toggle Transparency"
-                >
-                  {fillEnabled ? "SOLID" : "NONE"}
-                </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  "#0d5bd7", // Blue
+                  "#1a1a1a", // Black
+                  "#ef4444", // Red
+                  "#10b981", // Teal/Green
+                  "#f59e0b", // Orange
+                  "#ec4899", // Pink
+                  "#6b7280", // Grey
+                ].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setStrokeColor(color)}
+                    className="h-5 w-5 rounded-full border border-slate-200/80 shadow-sm relative transition duration-150 hover:scale-110"
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  >
+                    {strokeColor.toLowerCase() === color.toLowerCase() && (
+                      <span className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-white shadow-sm" />
+                    )}
+                  </button>
+                ))}
+                {/* Custom Color Selector Label */}
+                <label className="h-5 w-5 rounded-full border border-slate-200 bg-white shadow-sm flex items-center justify-center cursor-pointer transition hover:scale-110 text-[10px] text-slate-400 font-bold hover:bg-slate-50" title="Custom color">
+                  +
+                  <input
+                    type="color"
+                    value={strokeColor}
+                    onChange={(e) => setStrokeColor(e.target.value)}
+                    className="sr-only"
+                  />
+                </label>
               </div>
             </div>
 
-            <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">
-              Brush {brushSize}px
-            </label>
-            <input
-              type="range"
-              min={1}
-              max={10}
-              step={1}
-              value={brushSize}
-              onChange={(e) => setBrushSize(Number(e.target.value))}
-            />
-
-            <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">
-              Stroke
-            </label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {STROKE_STYLE_OPTIONS.map((opt) => (
+            {/* Fill Color */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Fill
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {/* None / Transparent Swatch with red slash */}
                 <button
-                  key={opt.id}
                   type="button"
-                  className={`rounded-[10px] border px-2 py-1.5 text-[0.68rem] font-semibold transition duration-150 ${strokeStyle === opt.id ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_18px_rgba(13,91,215,.24)]" : "border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:bg-[rgba(26,26,26,.05)]"}`}
-                  onClick={() => setStrokeStyle(opt.id as StrokeStyle)}
+                  onClick={() => setFillEnabled(false)}
+                  className="h-5 w-5 rounded-full border border-slate-200 relative transition duration-150 hover:scale-110 bg-white overflow-hidden"
+                  style={{
+                    background: "linear-gradient(135deg, transparent 43%, #ef4444 43%, #ef4444 57%, transparent 57%)",
+                  }}
+                  title="Transparent (None)"
                 >
-                  {opt.label}
+                  {!fillEnabled && (
+                    <span className="absolute inset-0 rounded-full border-1.5 border-blue-500" />
+                  )}
                 </button>
-              ))}
+                {[
+                  "#3b82f6", // Blue
+                  "#10b981", // Mint
+                  "#fef08a", // Yellow
+                  "#fbcfe8", // Pink
+                  "#e9d5ff", // Lavender
+                ].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => {
+                      setFillEnabled(true);
+                      setFillColor(color);
+                    }}
+                    className="h-5 w-5 rounded-full border border-slate-200/80 shadow-sm relative transition duration-150 hover:scale-110"
+                    style={{ backgroundColor: color }}
+                    title={color}
+                  >
+                    {fillEnabled && fillColor.toLowerCase() === color.toLowerCase() && (
+                      <span className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-slate-800 shadow-sm" />
+                    )}
+                  </button>
+                ))}
+                {/* Custom Fill Color Label */}
+                <label className="h-5 w-5 rounded-full border border-slate-200 bg-white shadow-sm flex items-center justify-center cursor-pointer transition hover:scale-110 text-[10px] text-slate-400 font-bold hover:bg-slate-50" title="Custom fill">
+                  +
+                  <input
+                    type="color"
+                    value={fillColor}
+                    onChange={(e) => {
+                      setFillEnabled(true);
+                      setFillColor(e.target.value);
+                    }}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
             </div>
 
-            <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">
-              Text Size
-            </label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {TEXT_SIZE_OPTIONS.map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  className={`rounded-[10px] border px-2 py-1.5 text-[0.72rem] font-semibold transition duration-150 ${textSize === size ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_18px_rgba(13,91,215,.24)]" : "border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:bg-[rgba(26,26,26,.05)]"}`}
-                  onClick={() => setTextSize(size)}
-                >
-                  {size}px
-                </button>
-              ))}
+            {/* Brush Size Slider */}
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <span>Brush</span>
+                <span>{brushSize}px</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={10}
+                step={1}
+                value={brushSize}
+                onChange={(e) => setBrushSize(Number(e.target.value))}
+                className="w-full accent-blue-600 cursor-pointer h-1 bg-slate-200 rounded-lg appearance-none"
+              />
+            </div>
+
+            {/* Stroke Style */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Style
+              </span>
+              <div className="grid grid-cols-3 gap-1">
+                {STROKE_STYLE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    className={`rounded-lg border py-1.5 text-[0.68rem] font-semibold transition duration-150 ${strokeStyle === opt.id ? "border-blue-500 bg-blue-50/60 text-blue-600 shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                    onClick={() => setStrokeStyle(opt.id as StrokeStyle)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Text Size */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Text Size
+              </span>
+              <div className="grid grid-cols-3 gap-1">
+                {TEXT_SIZE_OPTIONS.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className={`rounded-lg border py-1.5 text-[0.68rem] font-semibold transition duration-150 ${textSize === size ? "border-blue-500 bg-blue-50/60 text-blue-600 shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
+                    onClick={() => setTextSize(size)}
+                  >
+                    {size}px
+                  </button>
+                ))}
+              </div>
             </div>
 
             {activeTool === "text" && (
-              <>
-                <label className="mt-1 text-[0.72rem] font-semibold text-[var(--ink-soft)]">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Font
-                </label>
+                </span>
                 <div className="grid grid-cols-4 gap-1">
                   {FONT_OPTIONS.map((font) => (
                     <button
                       key={font.id}
                       type="button"
-                      className={`rounded-[8px] border px-1.5 py-1 text-[0.62rem] font-semibold transition duration-150 ${textFont === font.family ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_12px_rgba(13,91,215,.18)]" : "border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:bg-[rgba(26,26,26,.05)]"}`}
+                      className={`rounded-lg border py-1 text-[0.62rem] font-semibold transition duration-150 ${textFont === font.family ? "border-blue-500 bg-blue-50/60 text-blue-600 shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}
                       onClick={() => setTextFont(font.family)}
                       style={{ fontFamily: font.family }}
                       title={font.label}
@@ -2702,20 +2772,20 @@ export const CanvasPane = () => {
                     </button>
                   ))}
                 </div>
-              </>
+              </div>
             )}
 
             {(uploadingImage || imageStatus) && (
-              <div className="rounded-md border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.86)] px-2 py-1 text-[0.68rem] text-[var(--ink-soft)]">
+              <div className="rounded-md border border-[rgba(26,26,26,.12)] bg-[rgba(255,250,241,.86)] px-2 py-1 text-[0.68rem] text-[var(--ink-soft)]">
                 {uploadingImage ? "Uploading image..." : imageStatus}
               </div>
             )}
           </div>
 
-          <div className="mt-2 flex flex-col gap-2 border-t border-[rgba(26,26,26,.1)] pt-2">
+          <div className="mt-2 flex flex-col gap-2 border-t border-[rgba(26,26,26,.08)] pt-2.5">
             <button
               type="button"
-              className="btn btn-outline btn-sm w-full flex items-center justify-center gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-40"
+              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-red-200/60 bg-red-50/20 py-1.5 text-[0.68rem] font-semibold text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-40"
               disabled={selectedObjectIds.length === 0}
               onClick={() => {
                 if (selectedObjectIds.length === 0) return;
@@ -2726,49 +2796,49 @@ export const CanvasPane = () => {
                 setSelectedObjects([]);
               }}
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <Trash2 className="w-3.5 h-3.5 stroke-[1.8]" />
               Delete ({selectedObjectIds.length})
             </button>
 
-            <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-3 gap-1">
               <button
                 type="button"
-                className="btn btn-outline btn-sm flex items-center justify-center gap-1"
+                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[0.68rem] font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-40"
                 onClick={undo}
                 disabled={!canUndo}
                 title="Undo (Cmd+Z)"
               >
-                <Undo2 className="w-3.5 h-3.5" />
+                <Undo2 className="w-3 h-3 stroke-[1.8]" />
                 Undo
               </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm flex items-center justify-center gap-1"
+                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[0.68rem] font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-40"
                 onClick={redo}
                 disabled={!canRedo}
                 title="Redo (Cmd+Shift+Z)"
               >
-                <Redo2 className="w-3.5 h-3.5" />
+                <Redo2 className="w-3 h-3 stroke-[1.8]" />
                 Redo
               </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm flex items-center justify-center gap-1"
+                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white py-1.5 text-[0.68rem] font-semibold text-slate-500 hover:bg-slate-50 disabled:opacity-40"
                 onClick={() => void replayRecent()}
                 disabled={!canUndo}
                 title="Replay recent drawing"
               >
-                <Play className="w-3 h-3 fill-current" />
+                <Play className="w-2.5 h-2.5 fill-current stroke-[1.8]" />
                 Replay
               </button>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.75)] px-2 py-1.5 text-[0.72rem]">
-              <span className="font-medium text-[var(--ink-soft)]">Zoom</span>
+            <div className="flex items-center justify-between rounded-lg border border-[rgba(26,26,26,.12)] bg-[rgba(255,250,241,.65)] px-2 py-1.5 text-[0.68rem]">
+              <span className="font-semibold text-[var(--ink-soft)]">Zoom</span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-xs flex items-center justify-center h-5 w-5 p-0"
+                  className="flex items-center justify-center h-5 w-5 rounded transition hover:bg-slate-100"
                   onClick={() =>
                     zoomAtPoint(
                       (containerRef.current?.clientWidth || 0) / 2,
@@ -2778,14 +2848,14 @@ export const CanvasPane = () => {
                   }
                   aria-label="Zoom out"
                 >
-                  <Minus className="w-3 h-3" />
+                  <Minus className="w-3 h-3 stroke-[1.8]" />
                 </button>
                 <span className="min-w-[40px] text-center font-bold text-[var(--ink)]">
                   {Math.round(view.scale * 100)}%
                 </span>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-xs flex items-center justify-center h-5 w-5 p-0"
+                  className="flex items-center justify-center h-5 w-5 rounded transition hover:bg-slate-100"
                   onClick={() =>
                     zoomAtPoint(
                       (containerRef.current?.clientWidth || 0) / 2,
@@ -2795,7 +2865,7 @@ export const CanvasPane = () => {
                   }
                   aria-label="Zoom in"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3 h-3 stroke-[1.8]" />
                 </button>
               </div>
             </div>

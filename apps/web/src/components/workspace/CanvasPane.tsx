@@ -11,6 +11,24 @@ import {
   useState,
 } from "react";
 import { useParams } from "next/navigation";
+import {
+  MousePointer,
+  Pencil,
+  Eraser,
+  ArrowRight,
+  Square,
+  Circle,
+  Type,
+  StickyNote,
+  Image as ImageIcon,
+  Undo2,
+  Redo2,
+  Play,
+  Minus,
+  Plus,
+  HelpCircle,
+  Trash2,
+} from "lucide-react";
 import { WSClient } from "@/lib/ws";
 import { getAccessToken } from "@/lib/api";
 import { useCanvasStore } from "@/store/canvas.store";
@@ -2517,33 +2535,47 @@ export const CanvasPane = () => {
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
-            {TOOLS.map((tool) => (
-              <button
-                key={tool.id}
-                type="button"
-                className={`rounded-[10px] border px-2 py-1.5 text-[0.72rem] font-semibold transition duration-150 ${activeTool === tool.id ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_18px_rgba(13,91,215,.24)]" : "border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:-translate-y-0.5 hover:bg-[rgba(26,26,26,.05)]"}`}
-                onClick={() => {
-                  const nextTool = tool.id as CanvasTool;
-                  setActiveTool(nextTool);
-                  if (nextTool === "image") {
-                    pendingImagePointRef.current = null;
-                    imageInputRef.current?.click();
-                  }
-                }}
-                title={tool.label}
-              >
-                {tool.symbol}
-              </button>
-            ))}
+            {TOOLS.map((tool) => {
+              const Icon = {
+                select: MousePointer,
+                draw: Pencil,
+                erase: Eraser,
+                arrow: ArrowRight,
+                rectangle: Square,
+                ellipse: Circle,
+                text: Type,
+                sticky: StickyNote,
+                image: ImageIcon,
+              }[tool.id];
+
+              return (
+                <button
+                  key={tool.id}
+                  type="button"
+                  className={`flex items-center justify-center rounded-[10px] border p-2 transition duration-150 ${activeTool === tool.id ? "border-[rgba(13,91,215,.56)] bg-[rgba(13,91,215,.14)] text-[var(--brand-strong)] shadow-[0_0_18px_rgba(13,91,215,.24)]" : "border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.65)] text-[var(--ink-soft)] hover:-translate-y-0.5 hover:bg-[rgba(26,26,26,.05)]"}`}
+                  onClick={() => {
+                    const nextTool = tool.id as CanvasTool;
+                    setActiveTool(nextTool);
+                    if (nextTool === "image") {
+                      pendingImagePointRef.current = null;
+                      imageInputRef.current?.click();
+                    }
+                  }}
+                  title={tool.label}
+                >
+                  {Icon ? <Icon className="h-4.5 w-4.5 stroke-[2.2]" /> : tool.symbol}
+                </button>
+              );
+            })}
           </div>
 
           <div className="group relative flex items-center">
             <button
               type="button"
-              className="flex h-6 w-6 items-center justify-center rounded-full border border-[rgba(26,26,26,.18)] bg-[rgba(255,250,241,.8)] text-[0.7rem] font-bold text-[var(--ink-soft)] transition hover:bg-[rgba(13,91,215,.12)] hover:text-[var(--brand-strong)]"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(26,26,26,.18)] bg-[rgba(255,250,241,.8)] text-[var(--ink-soft)] transition hover:scale-105 hover:bg-[rgba(13,91,215,.12)] hover:text-[var(--brand-strong)] shadow-sm"
               title="Keyboard shortcuts"
             >
-              ?
+              <HelpCircle className="w-4 h-4 stroke-[2.2]" />
             </button>
             <div className="pointer-events-none absolute left-8 top-0 z-50 hidden w-[200px] rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.97)] p-2 text-[0.62rem] leading-[1.5] text-[var(--ink-soft)] shadow-lg group-hover:pointer-events-auto group-hover:block">
               <strong>Shortcuts</strong>
@@ -2682,7 +2714,7 @@ export const CanvasPane = () => {
           <div className="mt-2 flex flex-col gap-2 border-t border-[rgba(26,26,26,.1)] pt-2">
             <button
               type="button"
-              className="btn btn-outline btn-sm w-full"
+              className="btn btn-outline btn-sm w-full flex items-center justify-center gap-1.5 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 disabled:opacity-40"
               disabled={selectedObjectIds.length === 0}
               onClick={() => {
                 if (selectedObjectIds.length === 0) return;
@@ -2693,42 +2725,49 @@ export const CanvasPane = () => {
                 setSelectedObjects([]);
               }}
             >
-              Delete Selected ({selectedObjectIds.length})
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete ({selectedObjectIds.length})
             </button>
 
             <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline btn-sm flex items-center justify-center gap-1"
                 onClick={undo}
                 disabled={!canUndo}
+                title="Undo (Cmd+Z)"
               >
+                <Undo2 className="w-3.5 h-3.5" />
                 Undo
               </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline btn-sm flex items-center justify-center gap-1"
                 onClick={redo}
                 disabled={!canRedo}
+                title="Redo (Cmd+Shift+Z)"
               >
+                <Redo2 className="w-3.5 h-3.5" />
                 Redo
               </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline btn-sm flex items-center justify-center gap-1"
                 onClick={() => void replayRecent()}
                 disabled={!canUndo}
+                title="Replay recent drawing"
               >
+                <Play className="w-3 h-3 fill-current" />
                 Replay
               </button>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.75)] px-2 py-1 text-[0.72rem]">
-              <span>Zoom</span>
-              <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between rounded-lg border border-[rgba(26,26,26,.14)] bg-[rgba(255,250,241,.75)] px-2 py-1.5 text-[0.72rem]">
+              <span className="font-medium text-[var(--ink-soft)]">Zoom</span>
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-xs"
+                  className="btn btn-ghost btn-xs flex items-center justify-center h-5 w-5 p-0"
                   onClick={() =>
                     zoomAtPoint(
                       (containerRef.current?.clientWidth || 0) / 2,
@@ -2736,15 +2775,16 @@ export const CanvasPane = () => {
                       0.9,
                     )
                   }
+                  aria-label="Zoom out"
                 >
-                  -
+                  <Minus className="w-3 h-3" />
                 </button>
-                <span className="min-w-[40px] text-center">
+                <span className="min-w-[40px] text-center font-bold text-[var(--ink)]">
                   {Math.round(view.scale * 100)}%
                 </span>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-xs"
+                  className="btn btn-ghost btn-xs flex items-center justify-center h-5 w-5 p-0"
                   onClick={() =>
                     zoomAtPoint(
                       (containerRef.current?.clientWidth || 0) / 2,
@@ -2752,8 +2792,9 @@ export const CanvasPane = () => {
                       1.1,
                     )
                   }
+                  aria-label="Zoom in"
                 >
-                  +
+                  <Plus className="w-3 h-3" />
                 </button>
               </div>
             </div>

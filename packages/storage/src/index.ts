@@ -91,7 +91,7 @@ export class GCSStorageService implements IStorageService {
 }
 
 export function createStorageService(): IStorageService {
-  if (process.env.GCP_KEY_FILE && process.env.GCS_BUCKET_NAME) {
+  if (process.env.GCP_KEY_FILE || process.env.GCS_BUCKET_NAME) {
     return new GCSStorageService();
   }
   return new LocalStorageService();

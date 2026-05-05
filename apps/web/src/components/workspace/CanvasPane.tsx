@@ -2227,8 +2227,6 @@ export const CanvasPane = () => {
       return;
     }
 
-    if (now - (draft.lastEmitAt ?? 0) < CANVAS_EMIT_INTERVAL_MS) return;
-
     if (draft.tool === "arrow") {
       const props = {
         id: draft.objectId,
@@ -2240,16 +2238,23 @@ export const CanvasPane = () => {
           { x, y },
         ],
       };
-      const before = cloneHistoryObject(objects.get(draft.objectId));
-      draftRef.current = { ...draft, lastEmitAt: now };
+
+      // Local update is instant (120FPS rendering!)
       upsertObject(draft.objectId, props);
-      sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "arrow", props);
-      recordHistory({
-        objectId: draft.objectId,
-        before,
-        after: cloneHistoryObject(props),
-        groupId: drawGroupIdRef.current || nextHistoryGroupId(),
-      });
+      needsRedrawRef.current = true;
+
+      // Broadcast and history are throttled to save network & memory
+      if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+        const before = cloneHistoryObject(objects.get(draft.objectId));
+        draftRef.current = { ...draft, lastEmitAt: now };
+        sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "arrow", props);
+        recordHistory({
+          objectId: draft.objectId,
+          before,
+          after: cloneHistoryObject(props),
+          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+        });
+      }
       return;
     }
 
@@ -2271,16 +2276,22 @@ export const CanvasPane = () => {
       strokeWidth: brushSize,
     };
 
-    const before = cloneHistoryObject(objects.get(draft.objectId));
-    draftRef.current = { ...draft, lastEmitAt: now };
+    // Local update is instant (120FPS rendering!)
     upsertObject(draft.objectId, props);
-    sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", shapeType, props);
-    recordHistory({
-      objectId: draft.objectId,
-      before,
-      after: cloneHistoryObject(props),
-      groupId: drawGroupIdRef.current || nextHistoryGroupId(),
-    });
+    needsRedrawRef.current = true;
+
+    // Broadcast and history are throttled to save network & memory
+    if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+      const before = cloneHistoryObject(objects.get(draft.objectId));
+      draftRef.current = { ...draft, lastEmitAt: now };
+      sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", shapeType, props);
+      recordHistory({
+        objectId: draft.objectId,
+        before,
+        after: cloneHistoryObject(props),
+        groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+      });
+    }
   };
 
   const onPointerUp = () => {

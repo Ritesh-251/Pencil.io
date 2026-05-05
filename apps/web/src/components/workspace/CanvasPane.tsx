@@ -1276,6 +1276,18 @@ export const CanvasPane = () => {
 
     const offObject = ws.on("canvas:object", (payload) => {
       if (!payload?.objectId) return;
+
+      // Prevent incoming server/peer updates from overriding objects currently in active local interaction
+      if (isDrawing.current && draftRef.current?.objectId === payload.objectId) {
+        return;
+      }
+      if (dragRef.current && dragRef.current.objectId === payload.objectId) {
+        return;
+      }
+      if (groupDragRef.current && groupDragRef.current.snapshots.some((s) => s.id === payload.objectId)) {
+        return;
+      }
+
       const rawData = payload?.data;
       const rawProps = rawData?.props ?? rawData ?? {};
       const normalized = {

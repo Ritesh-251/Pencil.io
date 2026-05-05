@@ -73,6 +73,7 @@ export const CanvasPane = () => {
     color: string;
     width: number;
   } | null>(null);
+  const needsRedrawRef = useRef(false);
   const rafIdRef = useRef<number | null>(null);
 
   const isDrawing = useRef(false);
@@ -217,6 +218,17 @@ export const CanvasPane = () => {
       | ReactMouseEvent<HTMLCanvasElement>,
   ) => {
     const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+  };
+
+  const getEventPointerPosition = (
+    e: PointerEvent | ReactPointerEvent<HTMLCanvasElement> | ReactMouseEvent<HTMLCanvasElement>,
+    canvas: HTMLCanvasElement,
+  ) => {
+    const rect = canvas.getBoundingClientRect();
     return {
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
@@ -1518,8 +1530,9 @@ export const CanvasPane = () => {
   // High-performance animation loop for fluid drawing
   useEffect(() => {
     const loop = () => {
-      if (isDrawing.current && activeStrokeRef.current) {
+      if (isDrawing.current && activeStrokeRef.current && needsRedrawRef.current) {
         drawAllRef.current?.();
+        needsRedrawRef.current = false;
       }
       rafIdRef.current = requestAnimationFrame(loop);
     };
@@ -2010,6 +2023,7 @@ export const CanvasPane = () => {
       color: strokeColor,
       width: brushSize,
     };
+    needsRedrawRef.current = true;
 
     // Create ONE stroke object immediately — points accumulate during pointer move
     const initProps = {
@@ -2159,26 +2173,49 @@ export const CanvasPane = () => {
 
     const now = Date.now();
     if (draft.tool === "draw") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const nativeEvent = e.nativeEvent;
+      const coalescedEvents = typeof nativeEvent.getCoalescedEvents === "function"
+        ? nativeEvent.getCoalescedEvents()
+        : [nativeEvent];
+
       const active = activeStrokeRef.current;
       if (!active) return;
-      const lastPt = active.points[active.points.length - 1];
-      const distSq = lastPt
-        ? (x - lastPt.x) ** 2 + (y - lastPt.y) ** 2
-        : Infinity;
-      if (distSq < 9) return;
-      active.points.push({ x, y });
 
-      if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
-        const props = {
-          id: draft.objectId,
-          type: "stroke",
-          color: strokeColor,
-          width: brushSize,
-          strokeStyle,
-          points: [...active.points],
-        };
-        draftRef.current = { ...draft, lastEmitAt: now };
-        sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "stroke", props);
+      let addedPoints = false;
+
+      for (const coalesced of coalescedEvents) {
+        const pointerPos = getEventPointerPosition(coalesced, canvas);
+        const { x: cx, y: cy } = screenToWorld(pointerPos.x, pointerPos.y);
+
+        const lastPt = active.points[active.points.length - 1];
+        const distSq = lastPt
+          ? (cx - lastPt.x) ** 2 + (cy - lastPt.y) ** 2
+          : Infinity;
+
+        if (distSq >= 9) {
+          active.points.push({ x: cx, y: cy });
+          addedPoints = true;
+        }
+      }
+
+      if (addedPoints) {
+        needsRedrawRef.current = true;
+
+        if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+          const props = {
+            id: draft.objectId,
+            type: "stroke",
+            color: strokeColor,
+            width: brushSize,
+            strokeStyle,
+            points: [...active.points],
+          };
+          draftRef.current = { ...draft, lastEmitAt: now };
+          sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "stroke", props);
+        }
       }
       return;
     }
@@ -2317,6 +2354,7 @@ export const CanvasPane = () => {
       }
       activeStrokeRef.current = null;
     }
+    needsRedrawRef.current = true;
 
     // Redundant records removed as they are now captured progressively in onPointerDown/Move
     isDrawing.current = false;

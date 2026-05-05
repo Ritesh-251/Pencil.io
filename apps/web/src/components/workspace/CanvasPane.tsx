@@ -2024,12 +2024,6 @@ export const CanvasPane = () => {
     };
     upsertObject(objectId, initProps);
     sendCanvasEvent(objectId, "CREATE_OBJECT", "stroke", initProps);
-    recordHistory({
-      objectId,
-      before: null,
-      after: cloneHistoryObject(initProps),
-      groupId: drawGroupIdRef.current,
-    });
   };
 
   const onPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -2175,26 +2169,16 @@ export const CanvasPane = () => {
       active.points.push({ x, y });
 
       if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
-        const existing = objects.get(draft.objectId);
         const props = {
-          ...existing,
           id: draft.objectId,
           type: "stroke",
           color: strokeColor,
           width: brushSize,
-          strokeStyle: existing?.strokeStyle || strokeStyle,
+          strokeStyle,
           points: [...active.points],
         };
-        const before = cloneHistoryObject(existing);
         draftRef.current = { ...draft, lastEmitAt: now };
-        upsertObject(draft.objectId, props);
         sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "stroke", props);
-        recordHistory({
-          objectId: draft.objectId,
-          before,
-          after: cloneHistoryObject(props),
-          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
-        });
       }
       return;
     }
@@ -2308,6 +2292,30 @@ export const CanvasPane = () => {
       }
       selectionBoxRef.current = null;
       setSelectionBox(null);
+    }
+
+    const draft = draftRef.current;
+    if (draft && draft.tool === "draw") {
+      const active = activeStrokeRef.current;
+      if (active) {
+        const props = {
+          id: draft.objectId,
+          type: "stroke",
+          color: active.color,
+          width: active.width,
+          strokeStyle,
+          points: [...active.points],
+        };
+        upsertObject(draft.objectId, props);
+        sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "stroke", props);
+        recordHistory({
+          objectId: draft.objectId,
+          before: null,
+          after: cloneHistoryObject(props),
+          groupId: drawGroupIdRef.current || nextHistoryGroupId(),
+        });
+      }
+      activeStrokeRef.current = null;
     }
 
     // Redundant records removed as they are now captured progressively in onPointerDown/Move

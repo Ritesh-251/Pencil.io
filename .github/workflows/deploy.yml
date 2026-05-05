@@ -69,7 +69,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # Update Node 1
-            ssh -o StrictHostKeyChecking=no 10.190.0.3 "cd ~/mypencil/app && docker compose pull && docker compose up -d"
+            ssh -o StrictHostKeyChecking=no 10.190.0.3 "cd ~/mypencil/app && docker system prune -af && docker compose pull && docker compose up -d"
             
             # Update Node 2
-            ssh -o StrictHostKeyChecking=no 10.190.0.4 "cd ~/mypencil/app && docker compose pull && docker compose up -d"
+            ssh -o StrictHostKeyChecking=no 10.190.0.4 "cd ~/mypencil/app && docker system prune -af && docker compose pull && docker compose up -d"

@@ -33,6 +33,17 @@ export class CanvasService {
     if (!action) return "Action is required";
 
     const shape = getShapeProps(data);
+    if (
+      action === "UPDATE_OBJECT" &&
+      shape?._translate &&
+      typeof shape._translate.dx === "number" &&
+      typeof shape._translate.dy === "number" &&
+      Number.isFinite(shape._translate.dx) &&
+      Number.isFinite(shape._translate.dy)
+    ) {
+      return null;
+    }
+
     const result = CanvasObjectSchema.safeParse(shape);
 
     if (!result.success) {

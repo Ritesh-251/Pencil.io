@@ -91,7 +91,8 @@ export class EventRouter {
         case "canvas:sync":
           void handleCanvasLoad(socket, {
             roomId: event.payload?.roomId,
-            fromTime: event.payload?.lastKnownTimestamp,
+            fromTime:
+              event.payload?.fromTime ?? event.payload?.lastKnownTimestamp,
           }).catch((error) => this.handleAsyncError(socket, error));
           break;
 

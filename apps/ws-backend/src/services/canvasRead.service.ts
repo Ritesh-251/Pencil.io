@@ -1,6 +1,11 @@
 import { prisma } from "@repo/db";
 import { materializeCRDT, mergeCRDT, type CRDTObject } from "../crdt/merge";
 import { isRecord } from "../utils/record.util";
+import { decompressSnapshotData } from "../snapshot/compress";
+
+const MAX_DELTA_EVENTS = Number(
+  process.env.CANVAS_LOAD_MAX_DELTA_EVENTS || 2000,
+);
 
 function readPatch(after: unknown): Record<string, any> | null {
   if (!isRecord(after)) return null;
@@ -18,7 +23,14 @@ function readSnapshotState(snapshot: any) {
   const state = new Map<string, CRDTObject>();
   if (!snapshot) return { state, valid: true };
 
-  const objects = snapshot?.data?.objects;
+  let data: any;
+  try {
+    data = decompressSnapshotData(snapshot.data);
+  } catch {
+    return { state, valid: false };
+  }
+
+  const objects = data?.objects;
   if (!Array.isArray(objects)) return { state, valid: false };
 
   for (const obj of objects) {
@@ -32,6 +44,53 @@ function readSnapshotState(snapshot: any) {
   return { state, valid: true };
 }
 
+function serializeHistoryEvent(event: any) {
+  return {
+    ...event,
+    time: event.time ? Number(event.time) : null,
+    version: event.version ? event.version.toString() : null,
+    undoneAtVersion: event.undoneAtVersion
+      ? event.undoneAtVersion.toString()
+      : null,
+  };
+}
+
+async function buildCurrentCanvasStatePayload(roomId: string) {
+  const objects = await prisma.canvasObject.findMany({
+    where: { roomId },
+    orderBy: [{ time: "asc" }, { actorId: "asc" }],
+    select: {
+      id: true,
+      crdt: true,
+      time: true,
+    },
+  });
+
+  let snapshotCutoffMs = 0;
+  const updates = objects
+    .map((obj) => {
+      if (obj.time && Number(obj.time) > snapshotCutoffMs) {
+        snapshotCutoffMs = Number(obj.time);
+      }
+
+      const data = materialize(obj.crdt as CRDTObject);
+      if (!data) return null;
+
+      return {
+        objectId: obj.id,
+        data,
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    snapshotCutoffMs,
+    updates,
+    replayedEvents: 0,
+    deltaTruncated: true,
+  };
+}
+
 export async function buildCanvasLoadPayload(
   roomId: string,
   fromTime?: number,
@@ -40,17 +99,30 @@ export async function buildCanvasLoadPayload(
     const events = await prisma.canvasActionHistory.findMany({
       where: {
         roomId,
+        isUndone: false,
+        isRedoInvalidated: false,
         time: {
           gt: BigInt(fromTime),
         },
       },
       orderBy: [{ time: "asc" }, { actorId: "asc" }],
+      take: MAX_DELTA_EVENTS,
     });
+
+    if (events.length === MAX_DELTA_EVENTS) {
+      return buildCurrentCanvasStatePayload(roomId);
+    }
+
+    const snapshotCutoffMs = events.reduce((max, event) => {
+      if (!event.time) return max;
+      return Math.max(max, Number(event.time));
+    }, fromTime);
 
     return {
       fromTime,
+      snapshotCutoffMs,
       replayedEvents: events.length,
-      events,
+      events: events.map(serializeHistoryEvent),
     };
   }
 
@@ -74,16 +146,26 @@ export async function buildCanvasLoadPayload(
   const events = await prisma.canvasActionHistory.findMany({
     where: {
       roomId,
+      isUndone: false,
+      isRedoInvalidated: false,
       time: {
         gt: BigInt(snapshotCutoffMs),
       },
     },
     orderBy: [{ time: "asc" }, { actorId: "asc" }],
+    take: MAX_DELTA_EVENTS,
   });
+
+  if (events.length === MAX_DELTA_EVENTS) {
+    return buildCurrentCanvasStatePayload(roomId);
+  }
+
+  let latestEventTimeMs = snapshotCutoffMs;
 
   for (const event of events) {
     if (!event.objectId) continue;
     if (!event.time || !event.actorId) continue;
+    latestEventTimeMs = Math.max(latestEventTimeMs, Number(event.time));
 
     const patch = readPatch(event.after);
     if (!patch) continue;
@@ -113,7 +195,7 @@ export async function buildCanvasLoadPayload(
     .filter(Boolean);
 
   return {
-    snapshotCutoffMs,
+    snapshotCutoffMs: latestEventTimeMs,
     updates,
     replayedEvents: events.length,
   };

@@ -22,6 +22,7 @@ type RateEntry = {
 
 const RATE_LIMIT_PER_SEC = Number(process.env.WS_RATE_LIMIT_PER_SEC || 300);
 const RATE_WINDOW_MS = 1000;
+const MAX_MESSAGE_BYTES = Number(process.env.WS_MAX_MESSAGE_BYTES || 256_000);
 // BUG-1: Auth timeout — close the socket if the handshake doesn't arrive in time
 const AUTH_TIMEOUT_MS = 10_000;
 const WRITE_EVENTS = new Set([
@@ -46,7 +47,10 @@ export class SocketManager {
     // Setup heartbeat to detect broken connections that didn't close properly
     const heartbeat = setInterval(() => {
       if (ws.isAlive === false) {
-        logger.warn({ socketId: ws.id, userId: ws.userId }, "Ghost socket detected — terminating");
+        logger.warn(
+          { socketId: ws.id, userId: ws.userId },
+          "Ghost socket detected — terminating",
+        );
         return ws.terminate();
       }
       ws.isAlive = false;
@@ -170,8 +174,8 @@ export class SocketManager {
   }
 
   private async handleMessage(socket: AuthenticatedSocket, raw: string) {
-    if (raw.length > 10_000) {
-      socket.close();
+    if (raw.length > MAX_MESSAGE_BYTES) {
+      sendSocketCodedError(socket, "MSG_TOO_LARGE", "Message too large");
       return;
     }
     try {
@@ -251,7 +255,7 @@ export class SocketManager {
     // BUG-5 FIX: Remove the socket from all rooms BEFORE broadcasting so the
     // disconnecting user does not receive its own "offline" event.
     const offlineRoomIds = roomManager.removeSocket(socket) || [];
-    
+
     // Unregister user socket
     if (socket.userId) {
       const sockets = this.userSockets.get(socket.userId);

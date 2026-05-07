@@ -81,6 +81,7 @@ export const CanvasPane = () => {
   const wheelFrameRef = useRef<number | null>(null);
 
   const objects = useCanvasStore((s) => s.objects);
+  const objectsRef = useRef(objects);
   const objectsVersion = useCanvasStore((s) => s.version);
   const applyUpdate = useCanvasStore((s) => s.applyUpdate);
   const replaceObjects = useCanvasStore((s) => s.replaceObjects);
@@ -111,6 +112,7 @@ export const CanvasPane = () => {
   const eraseVisitedRef = useRef<Set<string>>(new Set());
   const eraseLastPointRef = useRef<{ x: number; y: number } | null>(null);
   const selectionBoxRef = useRef<SelectionBox | null>(null);
+  const remoteTranslateBaseRef = useRef<Map<string, any>>(new Map());
 
   const [activeTool, setActiveTool] = useState<CanvasTool>("draw");
   const [strokeColor, setStrokeColor] = useState("#0d5bd7");
@@ -136,8 +138,12 @@ export const CanvasPane = () => {
     useCanvasView();
 
   const upsertObject = useCallback(
-    (objectId: string, updates: Record<string, any>) => {
-      applyUpdate({ objectId, updates, timestamp: Date.now() });
+    (
+      objectId: string,
+      updates: Record<string, any>,
+      timestamp = Date.now(),
+    ) => {
+      applyUpdate({ objectId, updates, timestamp });
     },
     [applyUpdate],
   );
@@ -211,6 +217,10 @@ export const CanvasPane = () => {
     [objects, objectsVersion],
   );
 
+  useEffect(() => {
+    objectsRef.current = objects;
+  }, [objects]);
+
   const getActiveRoomId = () => roomId ?? WSClient.getInstance().getRoomId();
 
   const setSelectedObject = (objectId: string | null) => {
@@ -243,7 +253,10 @@ export const CanvasPane = () => {
   };
 
   const getEventPointerPosition = (
-    e: PointerEvent | ReactPointerEvent<HTMLCanvasElement> | ReactMouseEvent<HTMLCanvasElement>,
+    e:
+      | PointerEvent
+      | ReactPointerEvent<HTMLCanvasElement>
+      | ReactMouseEvent<HTMLCanvasElement>,
     canvas: HTMLCanvasElement,
   ) => {
     const rect = canvas.getBoundingClientRect();
@@ -967,6 +980,10 @@ export const CanvasPane = () => {
     return next;
   };
 
+  const isPointObject = (obj: any) =>
+    ["stroke", "arrow", "line"].includes(obj?.type) &&
+    Array.isArray(obj?.points);
+
   const getResizeHandles = (obj: any) => {
     const bounds = getObjectBounds(obj);
     if (!bounds)
@@ -1278,24 +1295,56 @@ export const CanvasPane = () => {
       if (!payload?.objectId) return;
 
       // Prevent incoming server/peer updates from overriding objects currently in active local interaction
-      if (isDrawing.current && draftRef.current?.objectId === payload.objectId) {
+      if (
+        isDrawing.current &&
+        draftRef.current?.objectId === payload.objectId
+      ) {
         return;
       }
       if (dragRef.current && dragRef.current.objectId === payload.objectId) {
         return;
       }
-      if (groupDragRef.current && groupDragRef.current.snapshots.some((s) => s.id === payload.objectId)) {
+      if (
+        groupDragRef.current &&
+        groupDragRef.current.snapshots.some((s) => s.id === payload.objectId)
+      ) {
         return;
       }
 
       const rawData = payload?.data;
       const rawProps = rawData?.props ?? rawData ?? {};
+      const payloadTimestamp =
+        typeof payload?.timestamp?.time === "number"
+          ? payload.timestamp.time
+          : Date.now();
+      const translate = rawProps?._translate;
+      if (
+        translate &&
+        typeof translate.dx === "number" &&
+        typeof translate.dy === "number"
+      ) {
+        const existing = objectsRef.current.get(payload.objectId);
+        if (!existing) return;
+        let base = remoteTranslateBaseRef.current.get(payload.objectId);
+        if (!base) {
+          base = cloneHistoryObject(existing);
+          remoteTranslateBaseRef.current.set(payload.objectId, base);
+        }
+        upsertObject(
+          payload.objectId,
+          buildMovedObject(base, translate.dx, translate.dy),
+          payloadTimestamp,
+        );
+        return;
+      }
+
+      remoteTranslateBaseRef.current.delete(payload.objectId);
       const normalized = {
         id: payload.objectId,
         ...rawProps,
         type: rawData?.type ?? rawProps?.type,
       };
-      upsertObject(payload.objectId, normalized);
+      upsertObject(payload.objectId, normalized, payloadTimestamp);
     });
 
     const offLoad = ws.on("canvas:load", (payload) => {
@@ -1303,6 +1352,7 @@ export const CanvasPane = () => {
       const updates = hasSnapshot ? payload.updates : [];
 
       if (hasSnapshot) {
+        remoteTranslateBaseRef.current.clear();
         const nextObjects = new Map<string, any>();
         updates.forEach((entry: any) => {
           if (!entry?.objectId) return;
@@ -1331,7 +1381,13 @@ export const CanvasPane = () => {
           ...rawProps,
           type: rawProps?.type,
         };
-        upsertObject(event.objectId, normalized);
+        upsertObject(
+          event.objectId,
+          normalized,
+          typeof event?.time === "bigint"
+            ? Number(event.time)
+            : Number(event?.time || Date.now()),
+        );
       });
     });
 
@@ -1549,7 +1605,11 @@ export const CanvasPane = () => {
   // High-performance animation loop for fluid drawing
   useEffect(() => {
     const loop = () => {
-      if (isDrawing.current && activeStrokeRef.current && needsRedrawRef.current) {
+      if (
+        isDrawing.current &&
+        activeStrokeRef.current &&
+        needsRedrawRef.current
+      ) {
         drawAllRef.current?.();
         needsRedrawRef.current = false;
       }
@@ -1662,7 +1722,6 @@ export const CanvasPane = () => {
         });
       }
     });
-
   }, [activeFillColor, strokeColor, brushSize]);
 
   useEffect(() => {
@@ -2124,12 +2183,23 @@ export const CanvasPane = () => {
             const before = cloneHistoryObject(objects.get(id));
             const latest = objects.get(id);
             if (latest) {
-              sendCanvasEvent(
-                id,
-                "UPDATE_OBJECT",
-                latest.type || "shape",
-                latest,
-              );
+              if (isGroupMove && isPointObject(latest)) {
+                sendCanvasEvent(id, "UPDATE_OBJECT", latest.type || "stroke", {
+                  id,
+                  type: latest.type,
+                  _translate: {
+                    dx: x - gd.pointerStartX,
+                    dy: y - gd.pointerStartY,
+                  },
+                });
+              } else {
+                sendCanvasEvent(
+                  id,
+                  "UPDATE_OBJECT",
+                  latest.type || "shape",
+                  latest,
+                );
+              }
               recordHistory({
                 objectId: id,
                 before,
@@ -2170,13 +2240,28 @@ export const CanvasPane = () => {
       if (now - (drag.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
         const before = cloneHistoryObject(objects.get(drag.objectId));
         dragRef.current = { ...drag, lastEmitAt: now };
-        upsertObject(drag.objectId, nextObject);
-        sendCanvasEvent(
-          drag.objectId,
-          "UPDATE_OBJECT",
-          nextObject.type || "shape",
-          nextObject,
-        );
+        if (drag.mode === "move" && isPointObject(nextObject)) {
+          sendCanvasEvent(
+            drag.objectId,
+            "UPDATE_OBJECT",
+            nextObject.type || "stroke",
+            {
+              id: drag.objectId,
+              type: nextObject.type || "stroke",
+              _translate: {
+                dx: x - drag.pointerStartX,
+                dy: y - drag.pointerStartY,
+              },
+            },
+          );
+        } else {
+          sendCanvasEvent(
+            drag.objectId,
+            "UPDATE_OBJECT",
+            nextObject.type || "shape",
+            nextObject,
+          );
+        }
         recordHistory({
           objectId: drag.objectId,
           before,
@@ -2196,9 +2281,10 @@ export const CanvasPane = () => {
       if (!canvas) return;
 
       const nativeEvent = e.nativeEvent;
-      const coalescedEvents = typeof nativeEvent.getCoalescedEvents === "function"
-        ? nativeEvent.getCoalescedEvents()
-        : [nativeEvent];
+      const coalescedEvents =
+        typeof nativeEvent.getCoalescedEvents === "function"
+          ? nativeEvent.getCoalescedEvents()
+          : [nativeEvent];
 
       const active = activeStrokeRef.current;
       if (!active) return;
@@ -2224,13 +2310,18 @@ export const CanvasPane = () => {
         needsRedrawRef.current = true;
 
         if (now - (draft.lastEmitAt ?? 0) >= CANVAS_EMIT_INTERVAL_MS) {
+          const MAX_WIRE_POINTS = 300;
+          const wirePoints =
+            active.points.length > MAX_WIRE_POINTS
+              ? active.points.slice(-MAX_WIRE_POINTS)
+              : active.points;
           const props = {
             id: draft.objectId,
             type: "stroke",
             color: strokeColor,
             width: brushSize,
             strokeStyle,
-            points: [...active.points],
+            points: [...wirePoints],
           };
           draftRef.current = { ...draft, lastEmitAt: now };
           sendCanvasEvent(draft.objectId, "UPDATE_OBJECT", "stroke", props);
@@ -2614,7 +2705,11 @@ export const CanvasPane = () => {
                   }}
                   title={tool.label}
                 >
-                  {Icon ? <Icon className="h-4 w-4 stroke-[1.8]" /> : tool.symbol}
+                  {Icon ? (
+                    <Icon className="h-4 w-4 stroke-[1.8]" />
+                  ) : (
+                    tool.symbol
+                  )}
                 </button>
               );
             })}
@@ -2650,7 +2745,10 @@ export const CanvasPane = () => {
                   </button>
                 ))}
                 {/* Custom Color Selector Label */}
-                <label className="h-5 w-5 rounded-full border border-slate-200 bg-white shadow-sm flex items-center justify-center cursor-pointer transition hover:scale-110 text-[10px] text-slate-400 font-bold hover:bg-slate-50" title="Custom color">
+                <label
+                  className="h-5 w-5 rounded-full border border-slate-200 bg-white shadow-sm flex items-center justify-center cursor-pointer transition hover:scale-110 text-[10px] text-slate-400 font-bold hover:bg-slate-50"
+                  title="Custom color"
+                >
                   +
                   <input
                     type="color"
@@ -2674,7 +2772,8 @@ export const CanvasPane = () => {
                   onClick={() => setFillEnabled(false)}
                   className="h-5 w-5 rounded-full border border-slate-200 relative transition duration-150 hover:scale-110 bg-white overflow-hidden"
                   style={{
-                    background: "linear-gradient(135deg, transparent 43%, #ef4444 43%, #ef4444 57%, transparent 57%)",
+                    background:
+                      "linear-gradient(135deg, transparent 43%, #ef4444 43%, #ef4444 57%, transparent 57%)",
                   }}
                   title="Transparent (None)"
                 >
@@ -2700,13 +2799,17 @@ export const CanvasPane = () => {
                     style={{ backgroundColor: color }}
                     title={color}
                   >
-                    {fillEnabled && fillColor.toLowerCase() === color.toLowerCase() && (
-                      <span className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-slate-800 shadow-sm" />
-                    )}
+                    {fillEnabled &&
+                      fillColor.toLowerCase() === color.toLowerCase() && (
+                        <span className="absolute inset-0 m-auto h-1.5 w-1.5 rounded-full bg-slate-800 shadow-sm" />
+                      )}
                   </button>
                 ))}
                 {/* Custom Fill Color Label */}
-                <label className="h-5 w-5 rounded-full border border-slate-200 bg-white shadow-sm flex items-center justify-center cursor-pointer transition hover:scale-110 text-[10px] text-slate-400 font-bold hover:bg-slate-50" title="Custom fill">
+                <label
+                  className="h-5 w-5 rounded-full border border-slate-200 bg-white shadow-sm flex items-center justify-center cursor-pointer transition hover:scale-110 text-[10px] text-slate-400 font-bold hover:bg-slate-50"
+                  title="Custom fill"
+                >
                   +
                   <input
                     type="color"

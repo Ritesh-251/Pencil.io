@@ -53,6 +53,7 @@ export default function RoomPage({
   const syncTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const membershipInFlightRef = useRef(false);
   const wsAuthRetryRef = useRef(false);
+  const lastCanvasSyncTimeRef = useRef(0);
 
   const [isWaiting, setIsWaiting] = useState(false);
   const [isHost, setIsHost] = useState(false);
@@ -106,7 +107,10 @@ export default function RoomPage({
     const ws = WSClient.getInstance();
     ws.send("room:join", { roomId });
     ws.send("chat:history", { roomId });
-    ws.send("canvas:sync", { roomId });
+    ws.send("canvas:sync", {
+      roomId,
+      fromTime: lastCanvasSyncTimeRef.current || undefined,
+    });
   }, [roomId]);
 
   const connectSocket = useCallback(
@@ -122,7 +126,7 @@ export default function RoomPage({
       setStatus("connecting");
       ws.connect(roomId, nextToken, {
         name: user?.username || user?.email,
-        avatarUrl: user?.avatarUrl
+        avatarUrl: user?.avatarUrl,
       });
     },
     [roomId, setStatus, user?.username, user?.email, user?.avatarUrl],
@@ -252,7 +256,9 @@ export default function RoomPage({
       const state = payload?.status;
       if (!targetId || typeof targetId !== "string") return;
       if (state === "online") {
-        const name = payload.name || (targetId === user?.id
+        const name =
+          payload.name ||
+          (targetId === user?.id
             ? user?.username || "You"
             : `User ${targetId.slice(0, 6)}`);
         setOnline(targetId, name, payload.avatarUrl);
@@ -309,7 +315,13 @@ export default function RoomPage({
       if (rawMessage) setCanvasError(rawMessage);
     });
 
-    const offCanvasLoad = ws.on("canvas:load", () => {
+    const offCanvasLoad = ws.on("canvas:load", (payload) => {
+      if (typeof payload?.snapshotCutoffMs === "number") {
+        lastCanvasSyncTimeRef.current = Math.max(
+          lastCanvasSyncTimeRef.current,
+          payload.snapshotCutoffMs,
+        );
+      }
       setCanvasError(null);
       stopSyncing();
     });
@@ -399,7 +411,10 @@ export default function RoomPage({
     setCanvasError(null);
     startSyncing();
     const ws = WSClient.getInstance();
-    ws.send("canvas:sync", { roomId });
+    ws.send("canvas:sync", {
+      roomId,
+      fromTime: lastCanvasSyncTimeRef.current || undefined,
+    });
   };
 
   const shareRoom = async () => {
@@ -447,9 +462,9 @@ export default function RoomPage({
   const [showCanvas, setShowCanvas] = useState(true);
   const [showChat, setShowChat] = useState(true);
   const [showMedia, setShowMedia] = useState(true);
-  const [insightTab, setInsightTab] = useState<"chat" | "transcript" | "ai" | "tasks">(
-    "chat",
-  );
+  const [insightTab, setInsightTab] = useState<
+    "chat" | "transcript" | "ai" | "tasks"
+  >("chat");
 
   useEffect(() => {
     const nextCanvas = loadBool(PANEL_KEYS.canvas, true);
@@ -696,7 +711,11 @@ export default function RoomPage({
                     title={p.name}
                   >
                     {p.avatarUrl && p.avatarUrl.trim() !== "" ? (
-                      <img src={p.avatarUrl} alt={p.name} className="w-full h-full object-cover" />
+                      <img
+                        src={p.avatarUrl}
+                        alt={p.name}
+                        className="w-full h-full object-cover"
+                      />
                     ) : (
                       p.initials
                     )}

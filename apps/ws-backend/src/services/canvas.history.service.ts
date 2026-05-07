@@ -267,7 +267,7 @@ export async function handleUndo(
     },
   });
 
-  return last;
+  return { ...last, resolvedProps: inverseProps };
 }
 
 /**
@@ -372,5 +372,5 @@ export async function handleRedo(
     },
   });
 
-  return action;
+  return { ...action, resolvedProps: redoProps };
 }

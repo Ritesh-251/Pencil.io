@@ -6,47 +6,6 @@ export class RoomManager {
   private roomSockets: Map<string, Set<AuthenticatedSocket>> = new Map();
   private socketRooms: Map<string, Set<string>> = new Map();
   private roomUsers: Map<string, Map<string, Set<string>>> = new Map();
-  private batchBuffer: Map<string, any[]> = new Map();
-  private batchTimer: NodeJS.Timeout | null = null;
-
-  private flushBatches() {
-    this.batchTimer = null;
-    const currentBatches = this.batchBuffer;
-    this.batchBuffer = new Map();
-
-    for (const [roomId, events] of currentBatches.entries()) {
-      const sockets = this.roomSockets.get(roomId);
-      if (!sockets || events.length === 0) continue;
-
-      const message = JSON.stringify(events);
-      const dead: AuthenticatedSocket[] = [];
-
-      for (const socket of sockets) {
-        if (socket.readyState !== socket.OPEN) {
-          dead.push(socket);
-          continue;
-        }
-        try {
-          socket.send(message);
-        } catch (error) {
-          logger.error(
-            {
-              roomId,
-              socketId: socket.id,
-              userId: socket.userId,
-              error,
-            },
-            "Broadcast send failed",
-          );
-          dead.push(socket);
-        }
-      }
-
-      for (const socket of dead) {
-        this.removeSocket(socket);
-      }
-    }
-  }
 
   joinRoom(roomId: string, socket: AuthenticatedSocket) {
     let sockets = this.roomSockets.get(roomId);
@@ -193,13 +152,16 @@ export class RoomManager {
     const sockets = this.roomSockets.get(roomId);
     if (!sockets) return [];
 
-    const userMap = new Map<string, { id: string; name?: string; avatarUrl?: string | null }>();
+    const userMap = new Map<
+      string,
+      { id: string; name?: string; avatarUrl?: string | null }
+    >();
     for (const s of sockets) {
       if (s.userId && !userMap.has(s.userId)) {
         userMap.set(s.userId, {
           id: s.userId,
           name: s.name,
-          avatarUrl: s.avatarUrl
+          avatarUrl: s.avatarUrl,
         });
       }
     }

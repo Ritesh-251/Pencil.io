@@ -115,6 +115,7 @@ export async function startCanvasConsumer() {
           return {
             type: "undo",
             version,
+            timestamp: logicalTimestamp,
             result: undone,
           };
         }
@@ -134,6 +135,7 @@ export async function startCanvasConsumer() {
           return {
             type: "redo",
             version,
+            timestamp: logicalTimestamp,
             result: redone,
           };
         }
@@ -144,6 +146,25 @@ export async function startCanvasConsumer() {
         if (event.type !== "canvas.draw") return null;
 
         const { objectId, action, data } = event.payload;
+        const props =
+          data?.props && typeof data.props === "object" ? data.props : data;
+        if (
+          action === "UPDATE_OBJECT" &&
+          props?._translate &&
+          typeof props._translate.dx === "number" &&
+          typeof props._translate.dy === "number"
+        ) {
+          return {
+            type: "object",
+            version,
+            timestamp: logicalTimestamp,
+            objectId,
+            action,
+            data,
+            transient: true,
+          };
+        }
+
         const existing = await tx.canvasObject.findUnique({
           where: { id: objectId },
         });
@@ -164,17 +185,29 @@ export async function startCanvasConsumer() {
           (typeof data?.type === "string" ? data.type : "shape");
 
         // 🔥 3. REDO INVALIDATION
-        await tx.canvasActionHistory.updateMany({
+        const redoCandidate = await tx.canvasActionHistory.findFirst({
           where: {
             roomId: event.roomId,
             userId: event.userId,
             isUndone: true,
             isRedoInvalidated: false,
           },
-          data: {
-            isRedoInvalidated: true,
-          },
+          select: { id: true },
         });
+
+        if (redoCandidate) {
+          await tx.canvasActionHistory.updateMany({
+            where: {
+              roomId: event.roomId,
+              userId: event.userId,
+              isUndone: true,
+              isRedoInvalidated: false,
+            },
+            data: {
+              isRedoInvalidated: true,
+            },
+          });
+        }
 
         // ---- APPLY ACTION ----
 
@@ -221,6 +254,7 @@ export async function startCanvasConsumer() {
         return {
           type: "object",
           version,
+          timestamp: logicalTimestamp,
           objectId,
           action,
           data,
@@ -244,17 +278,23 @@ export async function startCanvasConsumer() {
         }
 
         const outgoing = {
-          type: "canvas:undo",
+          type: "canvas:object",
           payload: {
             objectId: result.result.objectId,
             action: mapHistoryActionToCanvasAction(result.result.actionType),
+            data: {
+              type: result.result.resolvedProps?.type,
+              props: result.result.resolvedProps,
+            },
+            timestamp: result.timestamp,
+            userId: event.userId,
           },
         };
 
         roomManager.broadCast(event.roomId, outgoing);
 
         await safePublish({
-          type: "canvas:undo",
+          type: "canvas:object",
           roomId: event.roomId,
           payload: outgoing.payload,
         });
@@ -278,17 +318,23 @@ export async function startCanvasConsumer() {
         }
 
         const outgoing = {
-          type: "canvas:redo",
+          type: "canvas:object",
           payload: {
             objectId: result.result.objectId,
             action: mapHistoryActionToCanvasAction(result.result.actionType),
+            data: {
+              type: result.result.resolvedProps?.type,
+              props: result.result.resolvedProps,
+            },
+            timestamp: result.timestamp,
+            userId: event.userId,
           },
         };
 
         roomManager.broadCast(event.roomId, outgoing);
 
         await safePublish({
-          type: "canvas:redo",
+          type: "canvas:object",
           roomId: event.roomId,
           payload: outgoing.payload,
         });
@@ -306,9 +352,11 @@ export async function startCanvasConsumer() {
       // 🎨 OBJECT BROADCAST
       // ======================
       if (result.type === "object") {
-        const currentCount = updateRoomEventCount(event.roomId);
+        const currentCount = result.transient
+          ? 0
+          : updateRoomEventCount(event.roomId);
 
-        if (currentCount >= SNAPSHOT_EVERY_EVENTS) {
+        if (!result.transient && currentCount >= SNAPSHOT_EVERY_EVENTS) {
           triggerSnapshot(event.roomId, result.version);
           roomEventCountSinceSnapshot.set(event.roomId, 0);
         }
@@ -324,6 +372,7 @@ export async function startCanvasConsumer() {
             objectId: result.objectId,
             action: result.action,
             data: result.data,
+            timestamp: result.timestamp,
             userId: event.userId,
           },
         };

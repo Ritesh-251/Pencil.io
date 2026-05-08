@@ -11,6 +11,10 @@ export const handleChatHistory = async function (
   socket: AuthenticatedSocket,
   payload: any,
 ) {
+  if (!socket.userId) {
+    return sendSocketError(socket, "Unauthorized");
+  }
+
   if (!payload || typeof payload !== "object") {
     return sendSocketError(socket, "Invalid payload");
   }
@@ -20,7 +24,7 @@ export const handleChatHistory = async function (
   }
 
   try {
-    await assertRoomMember(socket.userId!, roomId);
+    await assertRoomMember(socket.userId, roomId);
     const orderedMessages = await getRecentRoomMessages(roomId, 50);
     socket.send(
       JSON.stringify({

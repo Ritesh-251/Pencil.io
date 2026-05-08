@@ -129,7 +129,11 @@ export class SocketManager {
     raw: string,
     authTimeout: ReturnType<typeof setTimeout>,
   ) {
-    clearTimeout(authTimeout);
+    try {
+      clearTimeout(authTimeout);
+    } catch {
+      // Auth timeout may have already fired and cleared itself
+    }
 
     let parsed: any;
     try {

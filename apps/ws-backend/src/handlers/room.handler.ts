@@ -11,13 +11,18 @@ export const handleRoomJoin = async function (
   socket: AuthenticatedSocket,
   payload: any,
 ) {
+  if (!socket.userId) {
+    sendSocketError(socket, "Unauthorized");
+    return;
+  }
+
   const { roomId } = payload;
   if (!roomId) {
     sendSocketError(socket, "roomId is required");
     return;
   }
   try {
-    await assertRoomMember(socket.userId!, roomId);
+    await assertRoomMember(socket.userId, roomId);
 
     const wasFirstSocket = roomManager.joinRoom(roomId, socket);
     const onlineUsers = roomManager.getOnlineUsers(roomId);
@@ -59,6 +64,11 @@ export const handleRoomLeave = async (
   socket: AuthenticatedSocket,
   payload: any,
 ) => {
+  if (!socket.userId) {
+    sendSocketError(socket, "Unauthorized");
+    return;
+  }
+
   const { roomId } = payload;
   if (!roomId) {
     sendSocketError(socket, "roomId is required");

@@ -86,11 +86,11 @@ async function bootstrap() {
       // 1. Stop accepting new WS upgrades / HTTP requests
       server.close();
       // 2. Close the RabbitMQ channel so in-flight confirms can drain
-      await closeRabbitMQ().catch(() => {});
+      await closeRabbitMQ().catch((err) => logger.error({ err }, "Failed to close RabbitMQ"));
       // 3. Disconnect from Redis
-      await pubsub.disconnect().catch(() => {});
+      await pubsub.disconnect().catch((err) => logger.error({ err }, "Failed to disconnect Redis"));
       // 4. Release the DB pool
-      await prisma.$disconnect().catch(() => {});
+      await prisma.$disconnect().catch((err) => logger.error({ err }, "Failed to disconnect Prisma"));
       logger.info("Graceful shutdown complete");
       process.exit(0);
     };

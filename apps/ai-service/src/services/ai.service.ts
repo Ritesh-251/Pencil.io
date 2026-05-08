@@ -87,7 +87,11 @@ export class AiService {
       },
     );
 
-    return payload?.embedding?.values as number[];
+    const values = payload?.embedding?.values;
+    if (!Array.isArray(values)) {
+      throw new Error(`Invalid embedding response from model ${modelName}`);
+    }
+    return values;
   }
 
   private async listEmbeddingModels(): Promise<string[]> {
@@ -120,15 +124,25 @@ export class AiService {
         "Gemini failed, falling back to Ollama:",
         geminiError.message,
       );
-      const text = await this.ollamaGenerate({
-        ...params,
-        image: visionImage,
-      });
-      return {
-        text,
-        provider: "ollama",
-        fallbackReason: geminiError.message,
-      };
+      try {
+        const text = await this.ollamaGenerate({
+          ...params,
+          image: visionImage,
+        });
+        return {
+          text,
+          provider: "ollama",
+          fallbackReason: geminiError.message,
+        };
+      } catch (ollamaError: any) {
+        logger.error(
+          { geminiError, ollamaError, model: params.model },
+          "Both Gemini and Ollama failed",
+        );
+        throw new Error(
+          `AI services unavailable: Gemini(${geminiError.message}), Ollama(${ollamaError.message})`,
+        );
+      }
     }
   }
 

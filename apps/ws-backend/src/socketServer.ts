@@ -2,6 +2,7 @@ import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import express from "express";
 import cors from "cors";
+import crypto from "crypto";
 import { SocketManager } from "./socketManager";
 import { storageService } from "@repo/storage";
 
@@ -139,7 +140,13 @@ function isInternalAuthorized(req: express.Request) {
   }
 
   const providedToken = authHeader.slice("Bearer ".length).trim();
-  return providedToken.length > 0 && providedToken === adminToken;
+  if (!providedToken.length || providedToken.length !== adminToken.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(
+    Buffer.from(providedToken),
+    Buffer.from(adminToken),
+  );
 }
 
 function roomIdFromUploadRelativePath(relativePath: string) {
@@ -326,7 +333,6 @@ export async function startSocketServer() {
   const wss = new WebSocketServer({
     noServer: true,
   });
-  const socketManager = new SocketManager();
 
   server.on("upgrade", (request, socket, head) => {
     const origin = resolveCorsOrigin(request);

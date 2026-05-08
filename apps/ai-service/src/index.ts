@@ -13,6 +13,7 @@ try {
 
 import { prisma } from "@repo/db";
 import { app } from "./app";
+import { logger } from "./infra/logger";
 import { ensureAiSchema } from "./schema.bootstrap";
 import { validateAiEnvironment } from "./ai.routes";
 import { initRabbitMQ, onRabbitReady, rabbitClient } from "./infra/rabbitmq";
@@ -47,8 +48,8 @@ async function startServer() {
         "Shutdown signal received — draining and exiting",
       );
       server.close(async () => {
-        await rabbitClient.close().catch(() => {});
-        await prisma.$disconnect().catch(() => {});
+        await rabbitClient.close().catch((err) => logger.error({ err }, "Failed to close RabbitMQ"));
+        await prisma.$disconnect().catch((err) => logger.error({ err }, "Failed to disconnect Prisma"));
         logger.info("Graceful shutdown complete");
         process.exit(0);
       });

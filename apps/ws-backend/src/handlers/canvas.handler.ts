@@ -10,6 +10,10 @@ export async function handleCanvasObject(
   socket: AuthenticatedSocket,
   payload: any,
 ) {
+  if (!socket.userId) {
+    return sendSocketError(socket, "Unauthorized");
+  }
+
   const { roomId, objectId, action, data } = payload;
 
   if (!roomId || !objectId || !action) {
@@ -25,7 +29,7 @@ export async function handleCanvasObject(
 
   const event = createCanvasObjectEvent({
     roomId,
-    userId: socket.userId!,
+    userId: socket.userId,
     objectId,
     type: action,
     data,

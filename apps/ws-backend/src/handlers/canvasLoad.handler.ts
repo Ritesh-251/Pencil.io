@@ -11,12 +11,16 @@ export async function handleCanvasLoad(
   socket: AuthenticatedSocket,
   payload: any,
 ) {
+  if (!socket.userId) {
+    return sendSocketError(socket, "Unauthorized");
+  }
+
   const { roomId, fromTime } = payload;
   if (!roomId) {
     return sendSocketError(socket, "roomId is required");
   }
   try {
-    await assertRoomMember(socket.userId!, roomId);
+    await assertRoomMember(socket.userId, roomId);
     const canvasPayload = await buildCanvasLoadPayload(roomId, fromTime);
 
     socket.send(

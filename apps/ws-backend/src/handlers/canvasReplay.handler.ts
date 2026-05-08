@@ -11,6 +11,11 @@ export async function handleCanvasReplay(
   socket: AuthenticatedSocket,
   payload: any,
 ) {
+  if (!socket.userId) {
+    sendSocketError(socket, "Unauthorized");
+    return;
+  }
+
   const { roomId, fromTime, toTime, toTimestamp } = payload || {};
 
   if (!roomId) {
@@ -19,7 +24,7 @@ export async function handleCanvasReplay(
   }
 
   try {
-    await assertRoomMember(socket.userId!, roomId);
+    await assertRoomMember(socket.userId, roomId);
 
     const { state, events } = await replayCanvas({
       roomId,

@@ -120,7 +120,7 @@ export class WSClient {
     return this.currentRoomId;
   }
 
-  isConnected() {
+  isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 

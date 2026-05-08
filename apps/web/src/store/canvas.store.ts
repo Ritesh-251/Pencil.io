@@ -36,8 +36,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
 
     if (changed) {
-      current.set(objectId, existing);
-      set((state) => ({ version: state.version + 1 }));
+      const newObjects = new Map(current);
+      newObjects.set(objectId, existing);
+      set({ objects: newObjects, version: get().version + 1 });
     }
   },
 }));

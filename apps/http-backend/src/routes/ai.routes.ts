@@ -43,7 +43,13 @@ async function proxyToAiService(path: string, init?: RequestInit) {
     },
   });
 
-  const payload = await response.json().catch(() => ({}));
+  let payload;
+  try {
+    payload = await response.json();
+  } catch (err) {
+    logger.error({ err, path, status: response.status }, "AI service returned invalid JSON");
+    payload = { error: "Invalid response from AI service" };
+  }
   return { status: response.status, payload };
 }
 

@@ -63,8 +63,16 @@ export async function startCanvasConsumer() {
   await channel.consume("canvas.queue", async (msg: ConsumeMessage | null) => {
     if (!msg) return;
 
+    let event;
+    try {
+      event = JSON.parse(msg.content.toString());
+    } catch (err) {
+      logger.error({ err }, "Failed to parse canvas message");
+      channel.nack(msg, false, false);
+      return;
+    }
+
     const startedAt = Date.now();
-    const event = JSON.parse(msg.content.toString());
     recordCanvasConsumerLagMs(
       Date.now() - Number(event.timestamp || Date.now()),
     );
@@ -443,8 +451,9 @@ export async function startCanvasConsumer() {
       // RabbitMQ x-death header tracks delivery attempts.
       const deathHeader = msg.properties.headers?.["x-death"]?.[0];
       const retryCount = deathHeader?.count || 0;
+      const MAX_RETRIES = Number(process.env.CANVAS_MAX_RETRIES ?? 3);
 
-      if (retryCount < 3) {
+      if (retryCount < MAX_RETRIES) {
         logger.warn(
           { eventId: event.id, retryCount },
           "Canvas consumer: transient error, requeueing",

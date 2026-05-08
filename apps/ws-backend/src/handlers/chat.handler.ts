@@ -9,12 +9,16 @@ export const handleChatSend = async function (
   socket: AuthenticatedSocket,
   payload: any,
 ) {
+  if (!socket.userId) {
+    return sendSocketError(socket, "Unauthorized");
+  }
+
   if (!payload || typeof payload !== "object") {
     return sendSocketError(socket, "Invalid payload");
   }
 
   const { roomId, content } = payload;
-  const userId = socket.userId!;
+  const userId = socket.userId;
 
   if (!roomId) return sendSocketError(socket, "roomId is required");
   if (!content || typeof content !== "string")

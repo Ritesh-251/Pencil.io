@@ -14,6 +14,7 @@ try {
 import { prisma } from "@repo/db";
 import { app } from "./app";
 import { logger } from "./infra/logger";
+import { logger } from "./infra/logger";
 import { initRedis, redisClient } from "./infra/redis";
 import { initRabbitMQ, onRabbitReady, rabbitClient } from "./infra/rabbitmq";
 import { startEmailConsumer } from "./consumers/email.consumer";
@@ -46,9 +47,9 @@ async function startServer() {
         "Shutdown signal received — draining and exiting",
       );
       server.close(async () => {
-        await rabbitClient.close().catch(() => {});
-        await redisClient.quit().catch(() => {});
-        await prisma.$disconnect().catch(() => {});
+        await rabbitClient.close().catch((err) => logger.error({ err }, "Failed to close RabbitMQ"));
+        await redisClient.quit().catch((err) => logger.error({ err }, "Failed to quit Redis"));
+        await prisma.$disconnect().catch((err) => logger.error({ err }, "Failed to disconnect Prisma"));
         logger.info("Graceful shutdown complete");
         process.exit(0);
       });

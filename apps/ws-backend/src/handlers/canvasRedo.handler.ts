@@ -16,22 +16,27 @@ export async function handleCanvasRedo(
   socket: AuthenticatedSocket,
   payload: CanvasRedoPayload,
 ) {
+  if (!socket.userId) {
+    sendSocketError(socket, "Unauthorized");
+    return;
+  }
+
   if (!payload?.roomId) {
     sendSocketError(socket, "roomId is required");
     return;
   }
 
   try {
-    await assertRoomMember(socket.userId!, payload.roomId);
+    await assertRoomMember(socket.userId, payload.roomId);
 
     await eventPublisher.publish({
       id: crypto.randomUUID(),
       type: "canvas.redo",
       roomId: payload.roomId,
-      userId: socket.userId!,
+      userId: socket.userId,
       timestamp: Date.now(),
       payload: {
-        timestamp: generateHLC(socket.userId!),
+        timestamp: generateHLC(socket.userId),
       },
     });
   } catch (error) {

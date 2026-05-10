@@ -12,41 +12,45 @@ import { WSClient } from "@/lib/ws";
 import { useAuthStore } from "@/store/auth.store";
 import { useRoomStore } from "@/store/room.store";
 import { useNotificationStore } from "@/store/notification.store";
+import { getAccessToken } from "@/lib/api";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Folder } from "lucide-react";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("ROOMS");
-  const { user } = useAuthStore();
+  const { user, authReady } = useAuthStore();
   const { rooms, fetchRooms, loading: roomsLoading } = useRoomStore();
   const { fetchUnreadCount, incrementUnread } = useNotificationStore();
 
   useEffect(() => {
-    if (user) {
-      fetchRooms();
-      fetchUnreadCount();
+    // Wait for AuthBootstrap to finish its silent refresh before connecting.
+    // Without this guard, authReady is false and getAccessToken() returns null,
+    // which caused the WebSocket to auth-fail on every page reload.
+    if (!authReady || !user) return;
 
-      // Connect to global notifications pulse
-      const ws = WSClient.getInstance();
-      const token = localStorage.getItem("token");
-      if (token) {
-        ws.connect("DASHBOARD", token, {
-          name: user.name || undefined,
-          avatarUrl: user.avatarUrl || undefined,
-        });
+    fetchRooms();
+    fetchUnreadCount();
 
-        const unsub = ws.on("notification:new", (payload) => {
-          console.log("[WS] New Notification received:", payload);
-          incrementUnread();
-        });
+    // Connect to global notifications pulse using the live in-memory token
+    const ws = WSClient.getInstance();
+    getAccessToken().then((token) => {
+      if (!token) return;
+      ws.connect("DASHBOARD", token, {
+        name: user.name || undefined,
+        avatarUrl: user.avatarUrl || undefined,
+      });
 
-        return () => {
-          unsub();
-        };
-      }
-    }
-  }, [user, fetchRooms, fetchUnreadCount, incrementUnread]);
+      const unsub = ws.on("notification:new", (payload) => {
+        console.log("[WS] New Notification received:", payload);
+        incrementUnread();
+      });
+
+      return () => {
+        unsub();
+      };
+    });
+  }, [authReady, user, fetchRooms, fetchUnreadCount, incrementUnread]);
 
   const renderContent = () => {
     if (activeTab === "PLANNER") {

@@ -31,10 +31,10 @@ export const oauthCallbackHandler = async (req: Request, res: Response) => {
       domain: process.env.COOKIE_DOMAIN || undefined,
     });
 
-    // Redirect to a frontend route that will capture the access token
-    // We pass the access token in a temporary way (e.g. hash or short-lived redirect)
-    // For simplicity and security, we can use a "bridge" page on the frontend
-    return res.redirect(`${FRONTEND_URL}/auth/callback?token=${accessToken}`);
+    // Redirect to a frontend bridge page using a URL fragment (#) so the JWT
+    // is never sent to the server, never stored in Nginx logs, and never leaked
+    // in the Referer header if the page loads any external resource.
+    return res.redirect(`${FRONTEND_URL}/auth/callback#token=${accessToken}`);
   } catch (error) {
     console.error("OAuth callback error:", error);
     return res.redirect(`${FRONTEND_URL}/auth/signin?error=server_error`);

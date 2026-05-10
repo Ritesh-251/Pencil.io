@@ -17,10 +17,13 @@ interface AuthState {
     bio?: string | null;
   } | null;
   token: string | null;
+  /** True once AuthBootstrap has finished its silent refresh attempt (success or failure). */
+  authReady: boolean;
   setAuth: (user: any, token: string) => void;
   setToken: (token: string | null) => void;
   updateUser: (data: Partial<NonNullable<AuthState["user"]>>) => void;
   clearToken: () => void;
+  setAuthReady: () => void;
   logout: () => void;
 }
 
@@ -45,6 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // Token starts null — api.ts will silently refresh from the httpOnly cookie.
   user: loadStoredUser(),
   token: null,
+  authReady: false,
 
   setAuth: (user, token) => {
     if (typeof window === "undefined" || !token || token === "undefined")
@@ -70,6 +74,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     localStorage.setItem("user", JSON.stringify(newUser));
     set({ user: newUser });
   },
+
+  // Called once by AuthBootstrap once the refresh attempt settles (success or failure).
+  setAuthReady: () => set({ authReady: true }),
 
   // Called by api.ts when a silent refresh succeeds on page reload.
   clearToken: () => {

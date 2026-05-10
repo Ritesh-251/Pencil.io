@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
 import { api } from "@/lib/api";
 
 function CallbackContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
 
   useEffect(() => {
-    const token = searchParams.get("token");
+    // Token is in the URL fragment (#token=...) so it never reaches the server,
+    // never appears in Nginx logs, and is not leaked via Referer headers.
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    const token = new URLSearchParams(hash.slice(1)).get("token");
+
     if (token) {
-      // Fetch the full profile now that we have the token
+      // Immediately clear the fragment from the URL so the token isn't
+      // visible in the address bar or accidentally captured by browser restore.
+      window.history.replaceState(null, "", window.location.pathname);
+
       api
         .get("/api/v1/auth/me", {
           headers: { Authorization: `Bearer ${token}` },
@@ -29,7 +35,7 @@ function CallbackContent() {
     } else {
       router.push("/auth/signin?error=oauth_failed");
     }
-  }, [searchParams, setAuth, router]);
+  }, [setAuth, router]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#FFFAF1] text-[var(--ink-soft)]">

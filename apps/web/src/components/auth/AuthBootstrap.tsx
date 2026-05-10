@@ -11,19 +11,23 @@ import { useAuthStore } from "@/store/auth.store";
  * httpOnly refresh-token cookie — no login prompt needed.
  */
 export function AuthBootstrap() {
-  const { user, setAuth, setToken } = useAuthStore();
+  const { user, setAuth, setToken, setAuthReady } = useAuthStore();
 
   useEffect(() => {
     initApiAuth().then((token) => {
-      if (!token) return;
-      // Sync the refreshed token into Zustand even if cached user metadata was
-      // cleared. Room/realtime flows key off token state and can operate with a
-      // null user until profile metadata is loaded again.
-      if (user) {
-        setAuth(user, token);
-      } else {
-        setToken(token);
+      if (token) {
+        // Sync the refreshed token into Zustand even if cached user metadata was
+        // cleared. Room/realtime flows key off token state and can operate with a
+        // null user until profile metadata is loaded again.
+        if (user) {
+          setAuth(user, token);
+        } else {
+          setToken(token);
+        }
       }
+      // Always signal that bootstrap is done — whether or not we got a token.
+      // This unblocks any component waiting for authReady.
+      setAuthReady();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

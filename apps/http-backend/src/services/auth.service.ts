@@ -208,6 +208,7 @@ export class AuthService {
       data: {
         tokenHash: newTokenHash,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        lastUsedAt: new Date(),
         ipAddress: req.ip,
         userAgent: req.headers["user-agent"],
       },

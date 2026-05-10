@@ -165,7 +165,10 @@ export const logout = async (req: Request, res: Response) => {
   try {
     const refreshToken = String(req.cookies.refreshToken || "");
     if (refreshToken) await authService.logout(refreshToken);
-    res.clearCookie("refreshToken");
+    // Must pass the same options used at set-time so the browser matches the
+    // correct cookie (domain, sameSite, path are part of the cookie identity).
+    res.clearCookie("refreshToken", REFRESH_TOKEN_COOKIE_OPTIONS);
+    res.clearCookie("has_session", { ...REFRESH_TOKEN_COOKIE_OPTIONS, httpOnly: false });
     return res.status(200).json({ message: "Logged out successfully" });
   } catch (error: any) {
     return res.status(500).json({ message: "Internal server error" });
@@ -175,7 +178,8 @@ export const logout = async (req: Request, res: Response) => {
 export const logoutAll = async (req: AuthRequest, res: Response) => {
   try {
     await authService.logoutAll(req.userId!);
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", REFRESH_TOKEN_COOKIE_OPTIONS);
+    res.clearCookie("has_session", { ...REFRESH_TOKEN_COOKIE_OPTIONS, httpOnly: false });
     return res.status(200).json({ message: "Logged out from all devices" });
   } catch (error: any) {
     return res.status(500).json({ message: "Internal server error" });
@@ -200,6 +204,28 @@ export const testerLogin = async (req: Request, res: Response) => {
 export const updateProfile = async (req: AuthRequest, res: Response) => {
   try {
     const { name, bio, avatarUrl } = req.body;
+
+    // SEC-2: Validate avatarUrl against allowed storage domains to prevent
+    // javascript: URLs, tracking pixels, or SSRF via stored user profile.
+    if (avatarUrl !== undefined && avatarUrl !== null && avatarUrl !== "") {
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(avatarUrl);
+      } catch {
+        return res.status(400).json({ message: "avatarUrl must be a valid URL" });
+      }
+      const allowedHosts = [
+        "lh3.googleusercontent.com",     // Google OAuth avatars
+        "avatars.githubusercontent.com", // GitHub OAuth avatars
+        "storage.googleapis.com",        // GCS direct
+        "cdn.mypencil.tech",             // Production CDN
+        "localhost",                     // Local dev
+      ];
+      if (!allowedHosts.some((h) => parsedUrl.hostname === h || parsedUrl.hostname.endsWith("." + h))) {
+        return res.status(400).json({ message: "avatarUrl domain is not permitted" });
+      }
+    }
+
     const user = await authService.updateProfile(req.userId!, { name, bio, avatarUrl });
     return res.status(200).json({ user });
   } catch (error: any) {

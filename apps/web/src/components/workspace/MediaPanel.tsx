@@ -704,10 +704,16 @@ function ReactionTray({
       }
     };
 
-    document.addEventListener("mousedown", handleOutsideClick);
-    document.addEventListener("touchstart", handleOutsideClick);
+    // Defer attaching the outside-click listener to the next event loop tick.
+    // Without this, the mousedown that opens the drawer immediately bubbles to
+    // document — which would trigger this handler and close it in the same cycle.
+    const timerId = setTimeout(() => {
+      document.addEventListener("mousedown", handleOutsideClick);
+      document.addEventListener("touchstart", handleOutsideClick);
+    }, 0);
 
     return () => {
+      clearTimeout(timerId);
       document.removeEventListener("mousedown", handleOutsideClick);
       document.removeEventListener("touchstart", handleOutsideClick);
     };

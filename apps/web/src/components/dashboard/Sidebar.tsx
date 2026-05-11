@@ -272,11 +272,11 @@ export const RoomCard = ({ room }: { room: any }) => {
         </div>
         <div className="flex flex-col items-end gap-1">
           <span className="rounded-full border border-[rgba(47,99,64,.38)] bg-[rgba(47,99,64,.14)] px-2 py-[2px] text-[0.8rem] text-[#24543a]">
-            {members} online
+            {members} {members === 1 ? "member" : "members"}
           </span>
-          {mounted && (
-            <span className="text-[0.68rem] font-medium tracking-tight text-[var(--ink-soft)] opacity-60 uppercase">
-              {timeAgo}
+          {mounted && timeAgo && (
+            <span className="text-[0.68rem] font-medium tracking-tight text-[var(--ink-soft)] opacity-60">
+              Created {timeAgo}
             </span>
           )}
         </div>

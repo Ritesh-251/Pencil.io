@@ -10,7 +10,7 @@ const REFRESH_WINDOW_MS = Number(
   process.env.AUTH_REFRESH_RATE_LIMIT_WINDOW_MS || 60_000,
 );
 const REFRESH_MAX_REQUESTS = Number(
-  process.env.AUTH_REFRESH_RATE_LIMIT_MAX || 120,
+  process.env.AUTH_REFRESH_RATE_LIMIT_MAX || 15,
 );
 
 // Redis store configurations

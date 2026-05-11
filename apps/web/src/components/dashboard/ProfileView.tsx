@@ -2,7 +2,39 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/auth.store";
 import { api } from "@/lib/api";
-import { User, Camera, Mail, AtSign, Check, Loader2 } from "lucide-react";
+import { User, Camera, Mail, AtSign, Check, Loader2, Monitor, Smartphone, Trash2, RefreshCcw } from "lucide-react";
+
+interface Session {
+  id: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt?: string | null;
+}
+
+function parseUA(ua: string | null | undefined): { device: string; browser: string } {
+  if (!ua) return { device: "Unknown device", browser: "Unknown browser" };
+  const isMobile = /Mobile|Android|iPhone|iPad/i.test(ua);
+  const isTablet = /iPad|Tablet/i.test(ua);
+  const device = isTablet ? "Tablet" : isMobile ? "Mobile" : "Desktop";
+  const browser = ua.match(/Chrome\/[\d.]+/) ? "Chrome"
+    : ua.match(/Firefox\/[\d.]+/) ? "Firefox"
+    : ua.match(/Safari\/[\d.]+/) ? "Safari"
+    : ua.match(/Edg\/[\d.]+/) ? "Edge"
+    : "Browser";
+  return { device, browser };
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 export const ProfileView = () => {
   const user = useAuthStore((s) => s.user);
@@ -15,6 +47,10 @@ export const ProfileView = () => {
   const [saved, setSaved] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   useEffect(() => {
     setMounted(true);
     if (user) {
@@ -23,6 +59,34 @@ export const ProfileView = () => {
       setAvatarUrl(user.avatarUrl || "");
     }
   }, [user]);
+
+  const loadSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const res = await api.get("/api/v1/auth/sessions");
+      setSessions(res.sessions ?? res ?? []);
+    } catch {
+      // silently fail
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const revokeSession = async (sessionId: string) => {
+    setRevokingId(sessionId);
+    try {
+      await api.delete(`/api/v1/auth/sessions/${sessionId}`);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch {
+      // silently fail
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +228,91 @@ export const ProfileView = () => {
           </div>
         </form>
       </div>
+
+      {/* ── Active Sessions ─────────────────────────────────── */}
+      <section className="mt-12 border-t border-[var(--border-subtle)] pt-8">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="ink-title m-0 text-[1.3rem]">Active Sessions</h2>
+            <p className="soft-copy mt-1 text-[0.82rem]">
+              Devices currently signed in to your account. Revoke any you don't recognise.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={loadSessions}
+            disabled={sessionsLoading}
+            className="btn btn-sm btn-outline flex items-center gap-1.5 text-[0.78rem]"
+          >
+            <RefreshCcw className={`w-3.5 h-3.5 ${sessionsLoading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
+
+        {sessionsLoading && sessions.length === 0 ? (
+          <div className="flex items-center gap-2 text-[0.83rem] soft-copy py-4">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading sessions…
+          </div>
+        ) : sessions.length === 0 ? (
+          <p className="soft-copy text-[0.83rem] py-4">No active sessions found.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {sessions.map((session, idx) => {
+              const { device, browser } = parseUA(session.userAgent);
+              const isMobile = /Mobile|Android|iPhone|iPad/i.test(session.userAgent ?? "");
+              const lastSeen = session.lastUsedAt
+                ? timeAgo(session.lastUsedAt)
+                : timeAgo(session.createdAt);
+              const isFirst = idx === 0;
+
+              return (
+                <div
+                  key={session.id}
+                  className={`flex items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors ${
+                    isFirst
+                      ? "border-[rgba(13,91,215,.25)] bg-[rgba(13,91,215,.04)]"
+                      : "border-[var(--border-subtle)] bg-[var(--bg-surface)]"
+                  }`}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex-shrink-0 text-[var(--ink-soft)]">
+                      {isMobile ? <Smartphone className="w-5 h-5" /> : <Monitor className="w-5 h-5" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[0.83rem] font-semibold text-[var(--ink)] truncate">
+                        {browser} on {device}
+                        {isFirst && (
+                          <span className="ml-2 rounded-full bg-[rgba(13,91,215,.12)] px-1.5 py-0.5 text-[0.65rem] font-bold text-[var(--brand)] uppercase tracking-wide">
+                            Current
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[0.72rem] soft-copy truncate">
+                        {session.ipAddress || "IP unknown"} · Last active {lastSeen}
+                      </p>
+                    </div>
+                  </div>
+                  {!isFirst && (
+                    <button
+                      type="button"
+                      onClick={() => revokeSession(session.id)}
+                      disabled={revokingId === session.id}
+                      className="flex-shrink-0 flex items-center gap-1 rounded-lg border border-[rgba(172,56,48,.3)] bg-[rgba(172,56,48,.06)] px-2.5 py-1.5 text-[0.72rem] font-semibold text-red-600 transition-colors hover:bg-[rgba(172,56,48,.12)] disabled:opacity-50"
+                    >
+                      {revokingId === session.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3 h-3" />
+                      )}
+                      Revoke
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 };
@@ -177,3 +326,4 @@ const stringToColor = (str: string) => {
   const h = Math.abs(hash) % 360;
   return `hsl(${h}, 65%, 55%)`;
 };
+

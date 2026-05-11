@@ -108,7 +108,7 @@ router.post("/logout-all", authMiddleware, logoutAll);
 router.get("/sessions", authMiddleware, sessions);
 router.delete("/sessions/:sessionId", authMiddleware, deleteSession);
 
-router.post("/tester", testerLogin);
+router.post("/tester", authRateLimitMiddleware, testerLogin);
 router.get("/me", authMiddleware, getProfile);
 router.patch("/me", authMiddleware, updateProfile);
 

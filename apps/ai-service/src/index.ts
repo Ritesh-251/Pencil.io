@@ -21,8 +21,6 @@ import { startIngestConsumer } from "./consumers/ingest.consumer";
 
 const PORT = process.env.PORT;
 
-import { createLogger } from "@repo/common";
-const logger = createLogger("ai-service");
 
 async function startServer() {
   try {

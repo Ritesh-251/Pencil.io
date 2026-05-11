@@ -15,6 +15,7 @@ interface TimerState {
   reset: () => void;
   tick: () => void;
   setMode: (mode: "work" | "break") => void;
+  setTime: (minutes: number) => void;
 }
 
 const WORK_TIME = 25 * 60;
@@ -41,12 +42,18 @@ export const useTimerStore = create<TimerState>()(
       pause: () => set({ isActive: false }),
 
       reset: () => {
-        const mode = get().mode;
-        const time = mode === "work" ? WORK_TIME : BREAK_TIME;
         set({ 
           isActive: false, 
-          timeLeft: time, 
-          totalTime: time 
+          timeLeft: get().totalTime 
+        });
+      },
+
+      setTime: (minutes) => {
+        const time = Math.floor(minutes * 60);
+        set({
+          timeLeft: time,
+          totalTime: time,
+          isActive: false
         });
       },
 

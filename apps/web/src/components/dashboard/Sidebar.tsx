@@ -139,7 +139,19 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
 
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-col">
-              <div className="text-2xl font-black tracking-tighter tabular-nums leading-none">
+              <div 
+                className="text-2xl font-black tracking-tighter tabular-nums leading-none cursor-pointer hover:opacity-80 transition-opacity"
+                title={!timer.isActive ? "Click to edit timer" : ""}
+                onClick={() => {
+                  if (!timer.isActive) {
+                    const currentMins = Math.floor(timer.timeLeft / 60);
+                    const newTime = prompt("Set timer minutes:", currentMins.toString());
+                    if (newTime && !isNaN(Number(newTime)) && Number(newTime) > 0) {
+                      timer.setTime(Number(newTime));
+                    }
+                  }
+                }}
+              >
                 {Math.floor(timer.timeLeft / 60)}:{(timer.timeLeft % 60).toString().padStart(2, '0')}
               </div>
               {timer.activeTaskTitle && (

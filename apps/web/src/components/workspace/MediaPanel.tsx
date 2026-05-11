@@ -1356,7 +1356,7 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
         (document as any).pictureInPictureEnabled));
 
   // ── Controls bar ────────────────────────────────────────────────────────────
-  const ControlsBar = ({ dark }: { dark?: boolean }) => (
+  const renderControlsBar = (dark?: boolean) => (
     <div
       className={`flex flex-wrap items-center gap-2 ${isExpanded ? "justify-center" : ""}`}
     >
@@ -1641,7 +1641,7 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
         {/* Controls */}
         <div className="shrink-0 border-t border-[var(--border-subtle)] px-5 py-3">
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <ControlsBar />
+            {renderControlsBar()}
           </div>
           {error && (
             <div className="mt-2 rounded-xl border border-[rgba(172,56,48,.24)] bg-[rgba(172,56,48,.12)] px-3 py-2 text-[0.78rem] text-[#8c2317]">
@@ -1818,7 +1818,7 @@ export function MediaPanel({ roomId, isExpanded = false }: MediaPanelProps) {
             activeSpeakers={activeSpeakers}
           />
         )}
-        <ControlsBar />
+        {renderControlsBar()}
         {error && (
           <div className="rounded-xl border border-[rgba(172,56,48,.24)] bg-[rgba(172,56,48,.12)] px-3 py-2 text-[0.78rem] text-[#8c2317]">
             {error}

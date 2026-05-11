@@ -176,6 +176,7 @@ export class RoomService {
       role: m.role,
       memberCount: m.room.memberCount,
       visibility: m.room.visibility,
+      createdAt: m.room.createdAt,
       lastMessage: m.room.messages[0] ?? null,
     }));
   }

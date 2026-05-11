@@ -14,8 +14,8 @@ try {
 import { prisma } from "@repo/db";
 import { app } from "./app";
 import { logger } from "./infra/logger";
-import { logger } from "./infra/logger";
 import { initRedis, redisClient } from "./infra/redis";
+
 import { initRabbitMQ, onRabbitReady, rabbitClient } from "./infra/rabbitmq";
 import { startEmailConsumer } from "./consumers/email.consumer";
 

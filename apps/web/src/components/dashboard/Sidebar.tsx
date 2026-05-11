@@ -22,7 +22,16 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
   const user = useAuthStore((s) => s.user);
   const timer = useTimerStore();
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
+  const [isEditingTimer, setIsEditingTimer] = useState(false);
+  const [timerInputValue, setTimerInputValue] = useState("");
 
+  const handleTimerSave = () => {
+    setIsEditingTimer(false);
+    const newTime = parseInt(timerInputValue, 10);
+    if (!isNaN(newTime) && newTime > 0) {
+      timer.setTime(newTime);
+    }
+  };
   useEffect(() => {
     setMounted(true);
     fetchUnreadCount();
@@ -139,21 +148,34 @@ export const Sidebar = ({ activeTab, onTabChange }: SidebarProps) => {
 
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-col">
-              <div 
-                className="text-2xl font-black tracking-tighter tabular-nums leading-none cursor-pointer hover:opacity-80 transition-opacity"
-                title={!timer.isActive ? "Click to edit timer" : ""}
-                onClick={() => {
-                  if (!timer.isActive) {
-                    const currentMins = Math.floor(timer.timeLeft / 60);
-                    const newTime = prompt("Set timer minutes:", currentMins.toString());
-                    if (newTime && !isNaN(Number(newTime)) && Number(newTime) > 0) {
-                      timer.setTime(Number(newTime));
+              {isEditingTimer ? (
+                <input
+                  type="number"
+                  autoFocus
+                  className="w-16 bg-[rgba(26,26,26,0.05)] text-2xl font-black tracking-tighter tabular-nums leading-none outline-none rounded-md px-1 text-[var(--ink)]"
+                  value={timerInputValue}
+                  onChange={(e) => setTimerInputValue(e.target.value)}
+                  onBlur={handleTimerSave}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleTimerSave();
+                    if (e.key === "Escape") setIsEditingTimer(false);
+                  }}
+                  min={1}
+                />
+              ) : (
+                <div 
+                  className="text-2xl font-black tracking-tighter tabular-nums leading-none cursor-pointer hover:opacity-80 transition-opacity"
+                  title={!timer.isActive ? "Click to edit timer" : ""}
+                  onClick={() => {
+                    if (!timer.isActive) {
+                      setTimerInputValue(Math.floor(timer.timeLeft / 60).toString());
+                      setIsEditingTimer(true);
                     }
-                  }
-                }}
-              >
-                {Math.floor(timer.timeLeft / 60)}:{(timer.timeLeft % 60).toString().padStart(2, '0')}
-              </div>
+                  }}
+                >
+                  {Math.floor(timer.timeLeft / 60)}:{(timer.timeLeft % 60).toString().padStart(2, '0')}
+                </div>
+              )}
               {timer.activeTaskTitle && (
                 <div className="text-[10px] font-bold text-indigo-500 truncate max-w-[120px] mt-1 flex items-center gap-1">
                   <Target className="w-2.5 h-2.5" />
